@@ -1,0 +1,27 @@
+# Official release source, pinned and verified: public prebuilt images have been withdrawn.
+# Build targets provide the same MinIO/mc commands used by Compose.
+FROM golang:1.24.2-alpine AS minio-build
+RUN apk add --no-cache ca-certificates tar
+ADD --checksum=sha256:1a63209927b9d1fb239b2a776b7b01d1902eff19379a108f4bc7005edcc0968c https://codeload.github.com/minio/minio/tar.gz/refs/tags/RELEASE.2025-04-22T22-12-26Z /tmp/source.tar.gz
+RUN mkdir /source && tar -xzf /tmp/source.tar.gz --strip-components=1 -C /source
+WORKDIR /source
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/minio .
+
+FROM golang:1.24.2-alpine AS mc-build
+RUN apk add --no-cache ca-certificates tar
+ADD --checksum=sha256:526ec538e7f83e4bfa631788129b08ec85898ca572ce0523ebf9a597946bea27 https://codeload.github.com/minio/mc/tar.gz/refs/tags/RELEASE.2025-04-16T18-13-26Z /tmp/source.tar.gz
+RUN mkdir /source && tar -xzf /tmp/source.tar.gz --strip-components=1 -C /source
+WORKDIR /source
+RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/mc .
+
+FROM alpine:3.21 AS minio
+RUN apk add --no-cache ca-certificates curl && adduser -D -u 1000 minio && mkdir /data && chown minio /data
+COPY --from=minio-build /out/minio /usr/local/bin/minio
+USER minio
+EXPOSE 9000 9001
+ENTRYPOINT ["minio"]
+
+FROM alpine:3.21 AS mc
+RUN apk add --no-cache ca-certificates
+COPY --from=mc-build /out/mc /usr/local/bin/mc
+ENTRYPOINT ["mc"]

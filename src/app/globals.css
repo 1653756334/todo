@@ -1,0 +1,1073 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --canvas: #f6f8fb;
+  --surface: #ffffff;
+  --surface-sunken: #f1f4f8;
+  --sidebar: #f8fafc;
+  --text: #202939;
+  --muted: #687588;
+  --border: #e4e9f0;
+  --accent: #2563eb;
+  --accent-soft: #edf3ff;
+  --danger: #b42318;
+  --warn: #996013;
+  --ok: #19734b;
+  --shadow: 0 16px 64px rgb(15 23 42 / 12%), 0 4px 16px rgb(15 23 42 / 6%);
+}
+
+.dark {
+  --canvas: #11151c;
+  --surface: #181e28;
+  --surface-sunken: #222b38;
+  --sidebar: #141a23;
+  --text: #e8edf5;
+  --muted: #a0adbf;
+  --border: #2c3645;
+  --accent: #8ab4ff;
+  --accent-soft: #243650;
+  --danger: #fda29b;
+  --warn: #f3ca7c;
+  --ok: #86d9b2;
+  --shadow: 0 16px 64px rgb(0 0 0 / 30%), 0 4px 16px rgb(0 0 0 / 16%);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-sunken: var(--surface-sunken);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-line: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-warn: var(--warn);
+  --color-ok: var(--ok);
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --radius-control: 8px;
+  --radius-panel: 12px;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    background: var(--canvas);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+  button:not(:disabled),
+  select {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--text);
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--accent);
+  }
+  input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+  summary {
+    cursor: pointer;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .field {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 12px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    font-size: 14px;
+    line-height: 1.5;
+    transition:
+      border-color 120ms ease,
+      box-shadow 120ms ease;
+  }
+  .field:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--muted) 40%, var(--border));
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .field:disabled {
+    background: var(--surface-sunken);
+    color: var(--muted);
+    cursor: not-allowed;
+  }
+  .field[aria-invalid="true"] {
+    border-color: var(--danger);
+  }
+  .field::placeholder {
+    color: var(--muted);
+    opacity: 0.8;
+  }
+  textarea.field {
+    line-height: 1.7;
+    resize: vertical;
+  }
+  select.field {
+    padding-right: 28px;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 40px;
+    padding: 0 15px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: var(--radius-control);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
+  }
+  .btn:not(.btn-primary):not(.btn-secondary):not(.btn-danger):not(.btn-danger-solid):not(.btn-ghost):hover:not(:disabled) {
+    background: var(--surface-sunken);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .dark .btn-primary {
+    color: #111b2c;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 90%, #172554);
+  }
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--surface-sunken);
+    border-color: color-mix(in srgb, var(--muted) 30%, var(--border));
+  }
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-sunken);
+    color: var(--text);
+  }
+  .btn-danger {
+    background: transparent;
+    color: var(--danger);
+    border-color: var(--border);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 6%, var(--surface));
+    border-color: var(--danger);
+  }
+  /* 弹窗里的确认动作：破坏性操作要是实心的，用户才能一眼看出分量 */
+  .btn-danger-solid {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
+  }
+  .dark .btn-danger-solid {
+    color: #2a0d09;
+  }
+  .btn-danger-solid:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--danger) 88%, #000);
+    border-color: color-mix(in srgb, var(--danger) 88%, #000);
+  }
+  /*
+   * 选择型控件。
+   *
+   * 「外观」「默认提前时间」这类互斥选择以前复用 btn-primary：选中项是一块实心蓝，
+   * 和页面唯一的保存主操作撞在一起，看起来像两个提交按钮。分段控件与选项胶囊
+   * 用浅底 + 主色文字表示选中，主按钮才继续独占实心蓝。
+   */
+  .segmented {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-sunken);
+  }
+  .segment {
+    display: inline-flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
+  }
+  .segment:hover:not(:disabled):not([aria-pressed="true"]) {
+    color: var(--text);
+  }
+  .segment[aria-pressed="true"] {
+    border-color: var(--border);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 8%);
+  }
+  .dark .segment[aria-pressed="true"] {
+    /* 深色下表面色比轨道还暗，选中项要再提亮一点才看得出来 */
+    background: color-mix(in srgb, var(--text) 12%, var(--surface));
+    box-shadow: none;
+  }
+  .segment:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .choice-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
+  }
+  .choice-chip:hover:not(:disabled) {
+    background: var(--surface-sunken);
+    color: var(--text);
+  }
+  .choice-chip[aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .choice-chip:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .btn-sm {
+    min-height: 34px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  .icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    width: 36px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    color: var(--muted);
+    transition:
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+  .icon-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .icon-button:hover:not(:disabled) {
+    background: var(--surface-sunken);
+    color: var(--text);
+  }
+  .label {
+    display: block;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 7px;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-panel);
+  }
+  .divider {
+    border-top: 1px solid var(--border);
+  }
+  .hint,
+  .section-description {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .error-text {
+    color: var(--danger);
+    font-size: 13px;
+  }
+  .section-title {
+    color: var(--text);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.5;
+  }
+  .settings-card {
+    min-width: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid var(--border);
+    margin-top: 24px;
+    padding-top: 20px;
+  }
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 6px;
+    background: var(--surface-sunken);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  /*
+   * 状态色语义：成功用绿、失败用红、待处理用黄。
+   * 以前成功状态统一用主色蓝，和「可以点的主按钮」是同一个颜色，
+   * 扫一眼分不清是状态还是操作。
+   */
+  .status-pill.is-ok {
+    background: color-mix(in srgb, var(--ok) 12%, transparent);
+    color: var(--ok);
+  }
+  .status-pill.is-danger {
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    color: var(--danger);
+  }
+  .status-pill.is-warn {
+    background: color-mix(in srgb, var(--warn) 14%, transparent);
+    color: var(--warn);
+  }
+  .status-pill.is-accent {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  /*
+   * 弹窗与浮层的进出场。
+   *
+   * 以前 Modal 的遮罩上写着 animate-[fadeIn_150ms_ease]，但项目里根本没有
+   * fadeIn 这个关键帧，面板也没有任何动画，所以弹窗一直是硬出现、硬消失。
+   * 这里给出真实的关键帧；由 Radix 根据 data-state 应用，它会在 closed 动画
+   * 结束后才卸载节点，所以退场也能看见。
+   *
+   * 面板的位移用独立的 translate 属性，不动 transform：
+   * - 弹窗居中用的是 Tailwind v4 的 translate，scale 写 transform 不会打架；
+   * - 下拉浮层的定位是 Radix 用内联 transform 算出来的，只能用 opacity + translate。
+   */
+  @keyframes overlay-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes overlay-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes panel-in {
+    from {
+      opacity: 0;
+      transform: scale(0.97) translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes panel-out {
+    from {
+      opacity: 1;
+      transform: none;
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.98) translateY(4px);
+    }
+  }
+  @keyframes popover-in {
+    from {
+      opacity: 0;
+      translate: 0 -4px;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+  .dialog-overlay[data-state="open"] {
+    animation: overlay-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .dialog-overlay[data-state="closed"] {
+    animation: overlay-out 140ms cubic-bezier(0.55, 0, 1, 0.45) forwards;
+  }
+  .dialog-panel[data-state="open"] {
+    animation: panel-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .dialog-panel[data-state="closed"] {
+    animation: panel-out 130ms cubic-bezier(0.55, 0, 1, 0.45) forwards;
+  }
+  .popover-panel[data-state="open"] {
+    animation: popover-in 140ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .popover-panel[data-state="closed"] {
+    animation: overlay-out 100ms ease-in forwards;
+  }
+  /* 折叠区域的箭头 */
+  .disclosure-chevron {
+    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .disclosure-chevron[data-open="true"] {
+    transform: rotate(180deg);
+  }
+  /* 设置区左侧分类列表：桌面端竖排，窄屏变成一条可横滑的标签带 */
+  .SectionNavList {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .SectionNavList::-webkit-scrollbar {
+    display: none;
+  }
+  .SectionNavItem {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 38px;
+    padding: 0 12px;
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 14px;
+    white-space: nowrap;
+    transition:
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+  .SectionNavItem:hover {
+    background: var(--surface-sunken);
+    color: var(--text);
+  }
+  .SectionNavItem[aria-current="page"] {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  @media (min-width: 1024px) {
+    .SectionNavList {
+      flex-direction: column;
+      gap: 2px;
+      overflow: visible;
+      padding-bottom: 0;
+    }
+    .SectionNavItem {
+      min-height: 40px;
+    }
+  }
+  .shortcut {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    background: var(--surface);
+    font-size: 11px;
+    font-family: var(--font-sans);
+  }
+  .brand-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: 9px;
+    background: #2563eb;
+    color: #fff;
+  }
+
+  .app-sidebar {
+    background: var(--sidebar);
+  }
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-height: 42px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 14px;
+    transition:
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+  .nav-link:hover {
+    color: var(--text);
+    background: var(--surface-sunken);
+  }
+  .nav-link[aria-current="page"] {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .nav-count {
+    margin-left: auto;
+    min-width: 21px;
+    padding: 0 5px;
+    text-align: center;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  .nav-count-pop {
+    animation: nav-count-pop 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  @keyframes nav-count-pop {
+    from {
+      opacity: 0;
+      transform: translateY(-3px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .nav-link[aria-current="page"] .nav-count {
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+    border-radius: 4px;
+  }
+  .shell-header {
+    min-height: 68px;
+  }
+  .search-box {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 38px;
+    border: 1px solid var(--border);
+    background: var(--canvas);
+    border-radius: 8px;
+    padding: 0 11px;
+  }
+  .search-box:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  .search-box input {
+    width: 100%;
+    min-width: 0;
+    background: transparent;
+    outline: none;
+    font-size: 13px;
+  }
+  .search-box input::placeholder {
+    color: var(--muted);
+  }
+  .page-heading {
+    padding: 32px 40px 24px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .page-heading-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .workspace-list {
+    padding: 0 40px 28px;
+  }
+  .workspace-inner {
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .task-filters {
+    padding: 0 40px 16px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .task-list {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .task-list-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 38px;
+    padding: 8px 18px;
+    background: var(--canvas);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .task-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    transition: background-color 100ms ease;
+  }
+  .task-row:last-child {
+    border-bottom: none;
+  }
+  .task-row:hover {
+    background: var(--canvas);
+  }
+  .task-row.is-active {
+    background: var(--accent-soft);
+  }
+  .task-row.is-active::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: var(--accent);
+  }
+  .task-row.is-focused {
+    box-shadow: inset 0 0 0 2px
+      color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .task-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    color: var(--muted);
+    border-radius: 6px;
+  }
+  .task-status:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .task-tag {
+    color: var(--muted);
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--surface-sunken);
+  }
+  /* 列表项里的链接胶囊：不进详情也能看见、能点开 */
+  .task-link-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    max-width: 260px;
+    padding: 1px 7px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 11px;
+    line-height: 20px;
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease,
+      color 120ms ease;
+  }
+  a.task-link-chip:hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .task-link-kind {
+    color: var(--muted);
+  }
+  a.task-link-chip:hover .task-link-kind {
+    color: inherit;
+  }
+  .task-link-more {
+    padding: 1px 6px;
+    border: 1px dashed var(--border);
+    border-radius: 5px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 20px;
+    font-variant-numeric: tabular-nums;
+  }
+  .task-link-more:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 360px;
+    padding: 48px 24px;
+    text-align: center;
+  }
+  .empty-state-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--canvas);
+    color: var(--muted);
+  }
+  .login-card {
+    width: 100%;
+    max-width: 400px;
+    padding: 36px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 8px 30px rgb(15 23 42 / 4%);
+  }
+  .loading-region {
+    animation: loading-reveal 140ms ease-out 120ms both;
+  }
+  .mobile-navigation {
+    /* Tailwind v4 用 translate 属性做位移，过渡 transform 不会生效 */
+    transition: translate 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  /* 滚动区域固定预留滚动条槽位：内容增减、弹窗锁滚动都不会挤动文字 */
+  .scroll-y {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  /* 移动端搜索：下拉展开/收起；桌面端恒定展开 */
+  .mobile-search {
+    order: 9999;
+    width: 100%;
+    max-height: 0;
+    opacity: 0;
+    visibility: hidden;
+    overflow: hidden;
+    transition:
+      max-height 170ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 140ms cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 170ms;
+  }
+  .mobile-search.is-open {
+    max-height: 64px;
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 0s;
+  }
+  @media (min-width: 768px) {
+    .mobile-search {
+      order: 0;
+      width: 240px;
+      max-height: none;
+      opacity: 1;
+      visibility: visible;
+      overflow: visible;
+      transition: none;
+    }
+  }
+  @media (min-width: 1280px) {
+    .mobile-search {
+      width: 300px;
+    }
+  }
+  .task-row {
+    overflow: hidden;
+  }
+  .task-status {
+    transition:
+      color 120ms ease,
+      background-color 120ms ease,
+      transform 120ms ease;
+  }
+  .task-status:active,
+  .icon-button:active {
+    transform: scale(0.95);
+  }
+  .btn:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+  .btn,
+  .icon-button {
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease,
+      transform 120ms ease;
+  }
+  @keyframes loading-reveal {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  .skeleton {
+    background: var(--surface-sunken);
+    animation: pulse 1.6s ease-in-out infinite;
+    border-radius: 6px;
+  }
+  @keyframes pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn:active:not(:disabled),
+    .icon-button:active,
+    .task-status:active {
+      transform: none;
+    }
+    .skeleton {
+      animation: none;
+    }
+    .loading-region {
+      animation: none;
+      opacity: 1;
+    }
+  }
+
+  @media (max-width: 1279px) {
+    .page-heading {
+      padding: 28px 28px 20px;
+    }
+    .workspace-list {
+      padding: 0 28px 24px;
+    }
+    .task-filters {
+      padding: 0 28px 16px;
+    }
+  }
+  @media (max-width: 767px) {
+    .field {
+      font-size: 16px;
+      min-height: 44px;
+    }
+    .btn {
+      min-height: 44px;
+    }
+    .btn-sm {
+      min-height: 38px;
+    }
+    .segment,
+    .choice-chip {
+      min-height: 40px;
+    }
+    .icon-button {
+      width: 44px;
+      height: 44px;
+    }
+    .shell-header {
+      min-height: 64px;
+    }
+    .page-heading {
+      padding: 24px 20px 20px;
+    }
+    .workspace-list {
+      padding: 0 16px 20px;
+    }
+    .task-filters {
+      padding: 0 16px 16px;
+    }
+    .task-row {
+      padding: 14px 12px;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .task-status {
+      width: 44px;
+      height: 44px;
+      margin-top: -8px;
+    }
+    .empty-state {
+      min-height: 300px;
+      padding: 36px 20px;
+    }
+    .settings-card {
+      padding: 20px;
+    }
+    .login-card {
+      padding: 28px;
+    }
+  }
+}
+
+/*
+ * 页面跳转的 pending 提示。
+ *
+ * 故意写在 @layer 之外：导航链接上带着 Tailwind 的 .transition-colors 工具类，
+ * 而 utilities 层永远压过 components 层，放在层里会被它覆盖掉过渡声明。
+ *
+ * 提示元素必须完全脱离文档流：以前这里插的是行内 spinner，会把 flex 行里
+ * 后面的元素顶开（设置页标签整排横向位移 22px、侧栏数量徽标跑位），
+ * 所以现在它只负责无障碍播报，视觉上改成把整条链接淡下来，不产生任何尺寸变化。
+ */
+.navigation-pending {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+a:has(> .navigation-pending) {
+  opacity: 0.6;
+  pointer-events: none;
+  cursor: progress;
+  transition: opacity 140ms cubic-bezier(0.22, 1, 0.36, 1) 160ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  a:has(> .navigation-pending) {
+    transition: none;
+  }
+}
+
+/*
+ * PWA / 安装到桌面后的适配。
+ * 装了桌面图标、viewport-fit 铺到刘海下面之后，系统栏会盖住贴底/贴边的元素，
+ * 用 safe-area-inset 把它们抬回来；浏览器里这几个内边距恒为 0，不影响网页。
+ * 这段同样写在 @layer 之外：声明要能压过元素上的 Tailwind 内边距工具类。
+ */
+.pwa-overlays {
+  position: fixed;
+  inset-inline: 0;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 12px;
+  /* 容器不挡点击，只有卡片本身可交互 */
+  pointer-events: none;
+}
+
+.pwa-card {
+  pointer-events: auto;
+  display: flex;
+  width: 100%;
+  max-width: 440px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 12px 16px;
+  box-shadow: 0 12px 40px rgb(15 23 42 / 12%), 0 2px 8px rgb(15 23 42 / 6%);
+}
+
+.dark .pwa-card {
+  box-shadow: 0 12px 40px rgb(0 0 0 / 40%), 0 2px 8px rgb(0 0 0 / 24%);
+}
+
+.app-sidebar {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.toast-stack {
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+}

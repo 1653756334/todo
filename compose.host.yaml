@@ -1,0 +1,8 @@
+# Local development/integration only. Use a unique Compose project name.
+services:
+  postgres:
+    ports: ["127.0.0.1:25432:5432"]
+  redis:
+    ports: ["127.0.0.1:26379:6379"]
+  minio:
+    ports: ["127.0.0.1:29000:9000", "127.0.0.1:29001:9001"]

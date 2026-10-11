@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "plugins": [], "incremental": false, "allowImportingTsExtensions": true },
+  "include": ["worker/**/*.ts", "src/server/**/*.ts", "src/shared/**/*.ts", "src/shared/**/*.mjs"],
+  "exclude": ["node_modules", "src/server/adapters"]
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "JobOutbox" ADD COLUMN "processedAt" TIMESTAMPTZ(3);

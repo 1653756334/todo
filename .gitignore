@@ -1,0 +1,28 @@
+# 依赖与构建产物
+node_modules
+.next
+out
+dist
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# 运行期数据与日志
+logs
+data
+.run
+*.db
+*.db-journal
+coverage
+
+# 本地环境文件（只有示例入库）
+.env
+.env.*
+!.env.example
+!.env.test.example
+
+# 设计文档与任务清单仅保留在本地，不进入版本库
+/docs/
+/.pi/
+
+.DS_Store
+npm-debug.log*

@@ -1,0 +1,359 @@
+// Self-hosted multi-user workspace. Instants are UTC/timestamptz.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskPriority {
+  high
+  normal
+  low
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  PENDING
+  DISABLED
+}
+
+model User {
+  id                     String                @id @default(cuid())
+  username               String                @unique
+  displayName            String
+  passwordHash           String
+  timezone               String                @default("Asia/Shanghai")
+  role                   Role                  @default(USER)
+  status                 AccountStatus         @default(ACTIVE)
+  accountEmail           String?               @unique
+  accountEmailVerifiedAt DateTime?             @db.Timestamptz(3)
+  sessionVersion         Int                   @default(1)
+  aiDailyQuotaOverride   Int?
+  createdAt              DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime              @updatedAt @db.Timestamptz(3)
+  preference             UserPreference?
+  projects               Project[]
+  tasks                  Task[]
+  imports                Import[]
+  drafts                 ImportDraft[]
+  images                 ImportImage[]
+  channels               NotificationChannel[]
+  reminders              Reminder[]
+  aiBudgets              AiDailyBudget[]
+  aiCalls                AiCall[]
+  tokens                 AccountToken[]
+}
+
+model UserPreference {
+  userId              String  @id
+  user                User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  remindEnabled       Boolean @default(true)
+  remindLeadMin       Int     @default(60)
+  notificationVersion Int     @default(1)
+}
+
+model Project {
+  id         String    @id @default(cuid())
+  ownerId    String
+  owner      User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name       String
+  repoUrl    String?
+  color      String?
+  revision   Int       @default(1)
+  archivedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+  tasks      Task[]
+
+  @@unique([ownerId, id])
+  @@index([ownerId, archivedAt])
+}
+
+model Task {
+  id                  String       @id @default(cuid())
+  ownerId             String
+  owner               User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  title               String
+  notes               String?
+  status              String       @default("todo")
+  priority            TaskPriority @default(normal)
+  dueAt               DateTime?    @db.Timestamptz(3)
+  projectId           String?
+  project             Project?     @relation(fields: [ownerId, projectId], references: [ownerId, id], onDelete: NoAction)
+  remindEnabled       Boolean      @default(true)
+  remindLeadMin       Int          @default(60)
+  sourceId            String?
+  source              Import?      @relation(fields: [ownerId, sourceId], references: [ownerId, id], onDelete: NoAction)
+  revision            Int          @default(1)
+  clientMutationId    String?
+  lastMutationId      String?
+  reminderVersion     Int          @default(0)
+  reminderFingerprint String?
+  completedAt         DateTime?    @db.Timestamptz(3)
+  createdAt           DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime     @updatedAt @db.Timestamptz(3)
+  tags                TaskTag[]
+  links               TaskLink[]
+  reminders           Reminder[]
+
+  @@unique([ownerId, clientMutationId])
+  @@index([ownerId, status, dueAt, id])
+  @@index([ownerId, projectId])
+  @@index([sourceId])
+}
+
+model TaskTag {
+  id     String @id @default(cuid())
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag    String
+
+  @@unique([taskId, tag])
+  @@index([tag, taskId])
+}
+
+model TaskLink {
+  id     String  @id @default(cuid())
+  taskId String
+  task   Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  kind   String
+  url    String
+  label  String?
+
+  @@index([taskId])
+}
+
+model ImportDraft {
+  id                String        @id @default(cuid())
+  ownerId           String
+  owner             User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  rawText           String        @default("")
+  status            String        @default("DRAFT")
+  provider          String?
+  model             String?
+  commitRequestId   String?
+  committedImportId String?       @unique
+  committedSource   Import?       @relation(fields: [committedImportId], references: [id], onDelete: SetNull)
+  expiresAt         DateTime      @db.Timestamptz(3)
+  createdAt         DateTime      @default(now()) @db.Timestamptz(3)
+  images            ImportImage[]
+
+  @@index([ownerId, status, expiresAt])
+}
+
+model Import {
+  id         String        @id @default(cuid())
+  ownerId    String
+  owner      User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  rawText    String
+  provider   String?
+  model      String?
+  createdAt  DateTime      @default(now()) @db.Timestamptz(3)
+  orphanedAt DateTime?     @db.Timestamptz(3)
+  tasks      Task[]
+  images     ImportImage[]
+  draft      ImportDraft?
+
+  @@unique([ownerId, id])
+  @@index([ownerId, createdAt])
+}
+
+model ImportImage {
+  id         String       @id @default(cuid())
+  ownerId    String
+  owner      User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  importId   String?
+  source     Import?      @relation(fields: [importId], references: [id], onDelete: Restrict)
+  draftId    String?
+  draft      ImportDraft? @relation(fields: [draftId], references: [id], onDelete: Restrict)
+  name       String
+  mimeType   String
+  storageKey String       @unique
+  size       Int
+  width      Int
+  height     Int
+  sha256     String
+  status     String       @default("STAGING")
+  expiresAt  DateTime?    @db.Timestamptz(3)
+  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+
+  @@index([importId])
+  @@index([draftId])
+  @@index([status, expiresAt])
+}
+
+model NotificationChannel {
+  id                  String                 @id @default(cuid())
+  ownerId             String
+  owner               User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  type                String
+  label               String
+  enabled             Boolean                @default(false)
+  minPriority         TaskPriority           @default(low)
+  brief               Boolean                @default(false)
+  revision            Int                    @default(1)
+  email               String?
+  verifiedAt          DateTime?              @db.Timestamptz(3)
+  webhookEncrypted    String?
+  signSecretEncrypted String?
+  lastTestAt          DateTime?              @db.Timestamptz(3)
+  lastSuccessAt       DateTime?              @db.Timestamptz(3)
+  lastErrorCode       String?
+  createdAt           DateTime               @default(now()) @db.Timestamptz(3)
+  deliveries          NotificationDelivery[]
+
+  @@index([ownerId, type])
+}
+
+model Reminder {
+  id              String                 @id @default(cuid())
+  taskId          String
+  task            Task                   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  recipientUserId String
+  recipient       User                   @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  planVersion     Int
+  triggerAt       DateTime               @db.Timestamptz(3)
+  dueSnapshot     DateTime               @db.Timestamptz(3)
+  status          String                 @default("pending")
+  // Historical fields preserved during legacy data import.
+  attempt         Int                    @default(0)
+  lastError       String?
+  sentAt          DateTime?              @db.Timestamptz(3)
+  lockedAt        DateTime?              @db.Timestamptz(3)
+  pushStatus      String?
+  pushAttempt     Int                    @default(0)
+  pushSentAt      DateTime?              @db.Timestamptz(3)
+  pushError       String?
+  createdAt       DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime               @updatedAt @db.Timestamptz(3)
+  deliveries      NotificationDelivery[]
+
+  @@unique([taskId, planVersion])
+  @@index([status, triggerAt])
+  @@index([recipientUserId, triggerAt])
+}
+
+model NotificationDelivery {
+  id               String               @id @default(cuid())
+  reminderId       String
+  reminder         Reminder             @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+  channelId        String?
+  channel          NotificationChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  channelType      String
+  labelSnapshot    String
+  channelRevision  Int
+  recipientVersion Int
+  status           String               @default("PENDING")
+  attempt          Int                  @default(0)
+  nextAttemptAt    DateTime             @db.Timestamptz(3)
+  dispatchVersion  Int                  @default(1)
+  claimToken       String?
+  lockedUntil      DateTime?            @db.Timestamptz(3)
+  sentAt           DateTime?            @db.Timestamptz(3)
+  errorCode        String?
+
+  @@unique([reminderId, channelId])
+  @@index([status, nextAttemptAt])
+}
+
+model JobOutbox {
+  id              String    @id @default(cuid())
+  kind            String
+  targetId        String
+  dispatchVersion Int
+  availableAt     DateTime  @db.Timestamptz(3)
+  publishedAt     DateTime? @db.Timestamptz(3)
+  processedAt     DateTime? @db.Timestamptz(3)
+  claimToken      String?
+  lockedUntil     DateTime? @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@unique([kind, targetId, dispatchVersion])
+  @@index([publishedAt, availableAt])
+}
+
+model AiDailyBudget {
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayUtc   DateTime @db.Date
+  used     Int      @default(0)
+  reserved Int      @default(0)
+
+  @@id([userId, dayUtc])
+}
+
+model AiCall {
+  id                     String    @id @default(cuid())
+  userId                 String
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayUtc                 DateTime  @db.Date
+  status                 String    @default("RESERVED")
+  reservationExpiresAt   DateTime  @db.Timestamptz(3)
+  providerConfigRevision Int
+  startedAt              DateTime  @default(now()) @db.Timestamptz(3)
+  finishedAt             DateTime? @db.Timestamptz(3)
+  tokenCount             Int?
+
+  @@index([status, reservationExpiresAt])
+  @@index([userId, startedAt])
+}
+
+model AccountToken {
+  id          String    @id @default(cuid())
+  purpose     String
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetEmail String?
+  channelId   String?
+  hash        String    @unique
+  expiresAt   DateTime  @db.Timestamptz(3)
+  usedAt      DateTime? @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([purpose, expiresAt])
+}
+
+model SystemSetting {
+  group     String   @id
+  value     Json
+  revision  Int      @default(1)
+  updatedBy String?
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  ip        String
+  username  String
+  succeeded Boolean
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([ip, createdAt])
+  @@index([username, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  targetId  String?
+  result    String
+  requestId String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt])
+}
+
+model WorkerHeartbeat {
+  instanceId String   @id
+  lastSeenAt DateTime @db.Timestamptz(3)
+  version    String
+}

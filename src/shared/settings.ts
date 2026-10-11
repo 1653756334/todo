@@ -1,0 +1,10 @@
+import { z } from "zod";
+const secret = z.string().max(2000).nullable().optional();
+export const smtpSchema = z.object({ host: z.string().trim().max(255).default(""), port: z.number().int().min(1).max(65535).default(587), encryption: z.enum(["tls", "starttls", "none"]).default("starttls"), user: z.string().max(255).default(""), pass: secret, fromName: z.string().max(80).default("Todo"), fromAddress: z.union([z.literal(""), z.email()]).default("") }).strict();
+export const aiSchema = z.object({ enabled: z.boolean().default(false), publicEnabled: z.boolean().default(false), baseUrl: z.union([z.literal(""), z.url()]).default(""), apiKey: secret, model: z.string().trim().max(150).default(""), dailyQuota: z.number().int().min(0).max(100000).default(50), concurrency: z.number().int().min(1).max(20).default(4), allowPrivateEndpoint: z.boolean().default(false) }).strict();
+export const policySchema = z.object({ registrationEnabled: z.boolean().default(false), verification: z.enum(["off", "on_signup"]).default("off"), emailAllowed: z.boolean().default(true), webhookAllowed: z.boolean().default(true), reminderGraceHours: z.number().int().min(0).max(168).default(24) }).strict();
+export const preferenceSchema = z.object({ timezone: z.string().refine(v => { try { new Intl.DateTimeFormat("en", { timeZone: v }); return true; } catch { return false; } }, "无法识别时区"), remindEnabled: z.boolean(), remindLeadMin: z.number().int().min(1).max(20160) }).strict();
+export const channelSchema = z.object({ id: z.string().optional(), type: z.enum(["EMAIL", "WEBHOOK"]), label: z.string().trim().min(1).max(80), enabled: z.boolean(), minPriority: z.enum(["low", "normal", "high"]), brief: z.boolean().default(false), email: z.email().nullable().optional(), webhook: secret, signSecret: secret, expectedRevision: z.number().int().positive().optional() }).strict();
+export type SmtpSettings = z.infer<typeof smtpSchema>;
+export type AiSettings = z.infer<typeof aiSchema>;
+export type Policy = z.infer<typeof policySchema>;

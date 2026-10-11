@@ -1,0 +1,10 @@
+CREATE UNIQUE INDEX "NotificationChannel_one_email_per_owner" ON "NotificationChannel" ("ownerId") WHERE "type" = 'EMAIL';
+ALTER TABLE "Task" ADD CONSTRAINT "Task_title_valid" CHECK (length(btrim("title")) BETWEEN 1 AND 300);
+ALTER TABLE "Task" ADD CONSTRAINT "Task_status_valid" CHECK ("status" IN ('todo','doing','done'));
+ALTER TABLE "Task" ADD CONSTRAINT "Task_priority_valid" CHECK ("priority" IN ('low','normal','high'));
+ALTER TABLE "Task" ADD CONSTRAINT "Task_lead_valid" CHECK ("remindLeadMin" BETWEEN 1 AND 20160);
+ALTER TABLE "UserPreference" ADD CONSTRAINT "Preference_lead_valid" CHECK ("remindLeadMin" BETWEEN 1 AND 20160);
+ALTER TABLE "User" ADD CONSTRAINT "User_quota_valid" CHECK ("aiDailyQuotaOverride" IS NULL OR "aiDailyQuotaOverride" >= 0);
+ALTER TABLE "NotificationChannel" ADD CONSTRAINT "Channel_type_valid" CHECK ("type" IN ('EMAIL','WEBHOOK'));
+ALTER TABLE "NotificationChannel" ADD CONSTRAINT "Channel_priority_valid" CHECK ("minPriority" IN ('low','normal','high'));
+ALTER TABLE "AiDailyBudget" ADD CONSTRAINT "Budget_nonnegative" CHECK ("used" >= 0 AND "reserved" >= 0);

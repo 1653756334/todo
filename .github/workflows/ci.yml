@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: 类型、规范与构建
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run typecheck:worker
+      - run: npm run build
+      - run: npm run worker:build
+
+  test:
+    name: 集成测试（PostgreSQL + Redis + MinIO）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+
+      # CI 自己起一套基础设施，用固定值，不碰任何真实数据。
+      - name: 写 CI 专用的 .env
+        run: |
+          cat > .env <<'ENV'
+          COMPOSE_PROJECT_NAME=todo-ci
+          POSTGRES_PASSWORD=ci-postgres-password
+          DATABASE_URL=postgresql://todo:ci-postgres-password@127.0.0.1:25432/todo
+          REDIS_URL=redis://127.0.0.1:26379
+          MINIO_ROOT_USER=ci-storage-root
+          MINIO_ROOT_PASSWORD=ci-storage-root-password
+          MINIO_ENDPOINT=http://127.0.0.1:29000
+          MINIO_BUCKET=todo-private
+          MINIO_ACCESS_KEY=ci-assets
+          MINIO_SECRET_KEY=ci-assets-secret
+          APP_SECRET=ci-app-secret-only-used-inside-ci
+          ENCRYPTION_KEY=ci-encryption-key-only-used-inside-ci
+          APP_URL=http://localhost:23330
+          ENV
+
+      # MinIO 官方镜像已下架，仓库自带的 Dockerfile.storage 会从源码构建，首次较慢。
+      - name: 拉起基础设施并建好应用桶
+        run: |
+          docker compose -p todo-ci -f compose.yaml -f compose.host.yaml up -d postgres redis minio
+          docker compose -p todo-ci -f compose.yaml -f compose.host.yaml up --exit-code-from init-storage init-storage
+
+      - name: 建测试库与测试桶（顺带生成 .env.test）
+        run: ./scripts/service.sh test-env
+
+      - run: npm test
+
+      - name: 失败时打印基础设施日志
+        if: failure()
+        run: docker compose -p todo-ci -f compose.yaml -f compose.host.yaml logs --tail 100
