@@ -11,6 +11,8 @@ export type Candidate = {
   priority: "low" | "normal" | "high";
   /** datetime 精度下为 ISO 字符串，其余为 null */
   dueAt: string | null;
+  /** 原文写明起止时间时的开始时间，否则 null */
+  startAt: string | null;
   /** date 精度下的 YYYY-MM-DD */
   dueDate: string | null;
   dueHint: string | null;
@@ -69,18 +71,20 @@ export function buildMessages(
     '   - 原文只给出日期（如“周五”“明天”）→ duePrecision="date"，dueDate 填 YYYY-MM-DD，dueAt=null',
     '   - 时间表达含糊（如“尽快”“下周找时间”“有空时”）→ duePrecision="ambiguous"，dueAt=null，dueDate=null',
     '   - 原文完全没有时间 → duePrecision="none"，dueAt=null，dueDate=null',
-    "4. dueHint 填原文里的时间短语原文，没有则 null。例如“周五下班前”。",
-    '5. priority 只能取 "low"、"normal"、"high"。原文明确表示紧急或重要用 "high"。',
-    "6. projectId 只能取上面列出的项目 id；无法判断则为 null。",
-    "7. tags 是最多 4 个短标签，没有则空数组。",
-    "8. links 只包含原文或截图中真实出现的链接，逐字保留完整地址，不要补全、改写或自己编造；没有则空数组。",
+    '4. 原文写明一段起止时间（如“14:00-16:00”“上午 9 点到 11 点”“10 月 14 日 8:00–12:00”）时：开始时间填 startAt，结束时间填 dueAt，都是带时区偏移的 ISO 8601（例如 2026-06-12T14:00:00+08:00），startAt 必须早于 dueAt。',
+    '5. 其余情况 startAt 一律为 null；原文只提到开始时间（如“下午两点开始”）时，把那个时间当作 dueAt。',
+    "6. dueHint 填原文里的时间短语原文，没有则 null。例如“周五下班前”；有起止时间时把整段都填上，例如“14:00-16:00”。",
+    '7. priority 只能取 "low"、"normal"、"high"。原文明确表示紧急或重要用 "high"。',
+    "8. projectId 只能取上面列出的项目 id；无法判断则为 null。",
+    "9. tags 是最多 4 个短标签，没有则空数组。",
+    "10. links 只包含原文或截图中真实出现的链接，逐字保留完整地址，不要补全、改写或自己编造；没有则空数组。",
     "   - 原文出现的每个 http(s) 链接都应该放进最相关任务的 links，不要只写进 notes 或标题里。",
     '   - kind 只能取 "repo"、"file"、"issue"、"pr"、"test"、"other"；在线笔试、测评、编程测试、面试预约入口用 "test"。',
     "   - label 是 20 字以内的说明，例如「在线笔试入口」「题目仓库」；不确定则 null。",
     "   - 同一条链接只放在一个任务里，不要重复。",
     "",
     "只输出如下结构的 JSON，不要输出任何解释：",
-    '{"tasks":[{"title":"","notes":null,"priority":"normal","duePrecision":"none","dueAt":null,"dueDate":null,"dueHint":null,"projectId":null,"tags":[],"links":[{"kind":"test","url":"https://example.com/assessment","label":"在线笔试入口"}]}]}',
+    '{"tasks":[{"title":"","notes":null,"priority":"normal","duePrecision":"none","dueAt":null,"startAt":null,"dueDate":null,"dueHint":null,"projectId":null,"tags":[],"links":[{"kind":"test","url":"https://example.com/assessment","label":"在线笔试入口"}]}]}',
   ].join("\n");
 
   return [
@@ -335,6 +339,11 @@ export function normalizeCandidates(
       dueDate = null;
     }
 
+    // 时间段：只有结束时间可用、且确实早于结束时间时才保留。
+    // 宁可退回单点，也不要存一个「开始时间比截止时间还晚」或「只有开始时间」的任务。
+    let startAt = dueAt === null ? null : normalizeDueAt(record.startAt, options.timeZone, options.now);
+    if (startAt !== null && dueAt !== null && Date.parse(startAt) >= Date.parse(dueAt)) startAt = null;
+
     const notes =
       typeof record.notes === "string" && record.notes.trim()
         ? record.notes.trim().slice(0, 20000)
@@ -364,6 +373,7 @@ export function normalizeCandidates(
       notes,
       priority,
       dueAt,
+      startAt,
       dueDate,
       dueHint,
       duePrecision: precision,

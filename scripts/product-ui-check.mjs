@@ -275,6 +275,40 @@ try {
     await page.keyboard.press('Escape');
     await page.locator('#task-title').waitFor({state:'hidden'});
   });
+  await check('AI 导入解析出时间段并带进任务',async()=>{
+    await open('/tasks');
+    await page.getByRole('button',{name:'粘贴内容',exact:true}).first().click();
+    await page.locator('#import-text').waitFor();
+    await page.locator('#import-text').fill('（验收用的假原文，不会发给 AI）');
+    const parseButton=page.getByRole('button',{name:'生成待办',exact:true});
+    // 填了内容还点不动，说明这台站点没有启用 AI：跳过而不是判失败。
+    if(await parseButton.isDisabled()){
+      console.log('SKIP AI 导入：当前站点未启用 AI，跳过时间段检查');
+      await page.getByRole('dialog').getByRole('button',{name:'取消',exact:true}).click();
+      await page.locator('#import-text').waitFor({state:'hidden'});
+      return;
+    }
+    const startIso=new Date(Date.now()+36*3600000).toISOString();
+    const dueIso=new Date(Date.now()+38*3600000).toISOString();
+    await page.route('**/api/ai/extract',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({candidates:[{title:'AI 时间段验收',notes:null,priority:'normal',duePrecision:'datetime',dueAt:dueIso,startAt:startIso,dueDate:null,dueHint:'（验收）',projectId:null,tags:[],links:[]}],provider:'stub',model:'stub'})}));
+    try{
+      await parseButton.click();
+      const status=page.getByText('已解析：',{exact:false}).first();
+      await status.waitFor();
+      if(!(await status.innerText()).includes('→'))throw Error('导入预览没有把时间段显示成区间');
+      await page.getByRole('button',{name:'详情',exact:true}).first().click();
+      if(!(await page.getByLabel('开始日期和时间').first().isVisible()))throw Error('导入预览里应当能直接改开始时间');
+      if(!(await page.getByLabel('截止日期和时间').first().isVisible()))throw Error('导入预览里应当能直接改截止时间');
+      await page.getByRole('button',{name:/加入 1 条任务/}).click();
+      await waitForDb(async()=>!!(await db.task.findFirst({where:{ownerId:admin.id,title:'AI 时间段验收'}}))?.startAt,'导入的任务没有带开始时间');
+      const created=await db.task.findFirstOrThrow({where:{ownerId:admin.id,title:'AI 时间段验收'}});
+      targets.push(created.id);
+      if(Math.abs(created.startAt.getTime()-Date.parse(startIso))>60000)throw Error('导入的开始时间不对');
+      if(!created.dueAt||Math.abs(created.dueAt.getTime()-Date.parse(dueIso))>60000)throw Error('导入的截止时间不对');
+    }finally{
+      await page.unroute('**/api/ai/extract');
+    }
+  });
   await check('分页后编辑保留已加载任务',async()=>{
     await db.task.createMany({data:Array.from({length:54},(_,index)=>({id:`${prefix}-page-${index}`,ownerId:admin.id,title:`分页验收任务 ${index}`,remindEnabled:false,createdAt:new Date(Date.now()-index*1000)}))});
     targets.push(...Array.from({length:54},(_,index)=>`${prefix}-page-${index}`));

@@ -55,6 +55,8 @@ type Candidate = {
   priority: string;
   projectId: string;
   dueAt: string | null;
+  /** 原文写明起止时间时的开始时间 */
+  startAt: string | null;
   dueHint: string | null;
   duePrecision: "datetime" | "date" | "ambiguous" | "none";
   dueDate: string | null;
@@ -67,6 +69,7 @@ type RawCandidate = {
   notes: string | null;
   priority: string;
   dueAt: string | null;
+  startAt?: string | null;
   dueDate: string | null;
   dueHint: string | null;
   duePrecision: Candidate["duePrecision"];
@@ -91,7 +94,10 @@ function dueStatusText(
 ): { tone: "ok" | "warn" | "muted"; text: string } {
   if (row.dueAt) {
     const past = new Date(row.dueAt).getTime() < Date.now();
-    const full = formatFullDateTime(new Date(row.dueAt), timeZone);
+    const due = formatFullDateTime(new Date(row.dueAt), timeZone);
+    const full = row.startAt
+      ? `${formatFullDateTime(new Date(row.startAt), timeZone)} → ${due}`
+      : due;
     const hint = row.dueHint ? `（原文：${row.dueHint}）` : "";
     return past
       ? { tone: "warn", text: `该时间已过：${full}${hint}` }
@@ -365,6 +371,7 @@ export function ImportDialog({
           priority: candidate.priority,
           projectId: projects.some(project => project.id === (candidate.projectId ?? defaultProjectId)) ? (candidate.projectId ?? defaultProjectId)! : "",
           dueAt: candidate.duePrecision === "datetime" ? candidate.dueAt : null,
+          startAt: candidate.duePrecision === "datetime" ? candidate.startAt ?? null : null,
           dueDate: candidate.dueDate,
           dueHint: candidate.dueHint,
           duePrecision: candidate.duePrecision,
@@ -412,6 +419,7 @@ export function ImportDialog({
               notes: row.notes.trim() || null,
               priority: row.priority,
               dueAt: row.dueAt,
+              startAt: row.startAt,
               projectId: row.projectId || null,
               tags: row.tags,
               links: row.links.map((link) => ({
@@ -443,6 +451,7 @@ export function ImportDialog({
   const selectedCount = selectedRows.length;
   const invalidSelection = selectedRows.some(row => !row.title.trim());
   const withDue = selectedRows.filter(row => row.dueAt).length;
+  const withRange = selectedRows.filter(row => row.dueAt && row.startAt).length;
   const withLinks = selectedRows.filter(row => row.links.length).length;
   const preview = phase === "preview" || phase === "committing";
   const busy = phase === "parsing" || phase === "committing";
@@ -713,7 +722,9 @@ export function ImportDialog({
                     已选择 {selectedCount} / {rows.length} 条
                   </h3>
                   <p className="section-description">
-                    {withDue ? `${withDue} 条包含截止时间。` : ""}
+                    {withDue ? `${withDue} 条包含截止时间` : ""}
+                    {withRange ? `，其中 ${withRange} 条是一段时间` : ""}
+                    {withDue ? "。" : ""}
                     {withLinks ? `${withLinks} 条包含链接。` : ""}
                     检查内容后再加入任务列表。
                   </p>
@@ -928,17 +939,20 @@ export function ImportDialog({
                         {warnDate ? (
                           <div>
                             <label className="label" htmlFor={`${row.key}-due`}>
-                              确认截止时间
+                              确认时间
                             </label>
                             <DateTimeField
                               id={`${row.key}-due`}
                               value={row.dueAt}
+                              startValue={row.startAt}
                               onChange={(iso) =>
-                                updateRow(row.key, { dueAt: iso })
+                                updateRow(row.key, { dueAt: iso, ...(iso === null ? { startAt: null } : {}) })
+                              }
+                              onStartChange={(iso) =>
+                                updateRow(row.key, { startAt: iso })
                               }
                               timeZone={timeZone}
                               disabled={busy}
-                              allowRange={false}
                             />
                           </div>
                         ) : null}
@@ -976,17 +990,20 @@ export function ImportDialog({
                                 className="label"
                                 htmlFor={`${row.key}-due-edit`}
                               >
-                                截止时间
+                                时间
                               </label>
                               <DateTimeField
                                 id={`${row.key}-due-edit`}
                                 value={row.dueAt}
+                                startValue={row.startAt}
                                 onChange={(iso) =>
-                                  updateRow(row.key, { dueAt: iso })
+                                  updateRow(row.key, { dueAt: iso, ...(iso === null ? { startAt: null } : {}) })
+                                }
+                                onStartChange={(iso) =>
+                                  updateRow(row.key, { startAt: iso })
                                 }
                                 timeZone={timeZone}
                                 disabled={busy}
-                                allowRange={false}
                               />
                             </div>
                           ) : null}
