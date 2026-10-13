@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CalendarDays, CalendarRange, Clock3, X } from "lucide-react";
+import { CalendarDays, Clock3, X } from "lucide-react";
 import {
   formatFullDateTime,
   fromLocalInputValue,
@@ -12,12 +12,14 @@ type Props = {
   id: string;
   /** 结束（截止）时间，ISO 字符串 */
   value: string | null;
-  /** 开始时间，ISO 字符串；不传就是「不支持时间段」 */
+  /** 开始时间，ISO 字符串 */
   startValue?: string | null;
   onChange: (iso: string | null) => void;
   onStartChange?: (iso: string | null) => void;
   timeZone: string;
   disabled?: boolean;
+  /** 是否显示「开始时间」（结构化导入里只需要一个截止时间，传 false） */
+  allowRange?: boolean;
 };
 
 /** 把 datetime-local 的本地值转成 ISO；无法解析返回 null */
@@ -27,7 +29,8 @@ function isoFromLocal(local: string, timeZone: string): string | null {
   return date ? date.toISOString() : null;
 }
 
-const RANGE_WARNING = "开始时间要早于结束时间";
+const RANGE_WARNING = "开始时间要早于截止时间";
+const NEED_DUE_WARNING = "设置开始时间时也要有截止时间";
 const PARSE_WARNING = "该日期或时间不可用，请重新选择。";
 
 export function DateTimeField({
@@ -38,8 +41,8 @@ export function DateTimeField({
   onStartChange,
   timeZone,
   disabled,
+  allowRange = true,
 }: Props) {
-  const [rangeExpanded, setRangeExpanded] = useState(false);
   // 草稿只在「顺序不合法」时保存用户刚输入的值，避免把无效值回调出去。
   const [startDraft, setStartDraft] = useState<string | undefined>(undefined);
   const [dueDraft, setDueDraft] = useState<string | undefined>(undefined);
@@ -59,7 +62,7 @@ export function DateTimeField({
     }
   }, [value, startValue]);
 
-  const rangeMode = startValue != null || rangeExpanded;
+  const showStart = allowRange;
 
   const startLocal =
     startDraft !== undefined
@@ -79,6 +82,8 @@ export function DateTimeField({
 
   const orderWarn =
     startDraft !== undefined || dueDraft !== undefined || quickConflict;
+  const warnText =
+    startDraft !== undefined && !dueIso ? NEED_DUE_WARNING : RANGE_WARNING;
 
   function handleDueInput(raw: string) {
     if (disabled) return;
@@ -90,10 +95,10 @@ export function DateTimeField({
       setQuickConflict(false);
       setParseWarn(null);
       onChange(null);
-      // 清空结束时间后，之前因冲突留下的开始时间就合法了，顺手回调出去。
-      if (draftStart !== undefined) {
+      // 没有截止时间就谈不上时间段，开始时间一并撤销（父级会合并成一次保存）。
+      if (draftStart !== undefined || startValue) {
         setStartDraft(undefined);
-        onStartChange?.(draftStart);
+        onStartChange?.(null);
       }
       return;
     }
@@ -132,7 +137,6 @@ export function DateTimeField({
       setStartDraft(undefined);
       setQuickConflict(false);
       setParseWarn(null);
-      setRangeExpanded(true);
       onStartChange?.(null);
       if (draftDue !== undefined) {
         setDueDraft(undefined);
@@ -150,7 +154,8 @@ export function DateTimeField({
     setParseWarn(null);
     setQuickConflict(false);
     const currentDue = dueIso;
-    if (currentDue && nextStart.getTime() >= Date.parse(currentDue)) {
+    // 还没有截止时间：先留在草稿里并提示，等截止时间填好再一起保存。
+    if (!currentDue || nextStart.getTime() >= Date.parse(currentDue)) {
       setStartDraft(raw);
       return;
     }
@@ -173,7 +178,6 @@ export function DateTimeField({
     setStartDraft(undefined);
     setQuickConflict(false);
     setParseWarn(null);
-    setRangeExpanded(true);
     onStartChange?.(null);
     if (draftDue !== undefined) {
       setDueDraft(undefined);
@@ -183,29 +187,14 @@ export function DateTimeField({
 
   function clearDue() {
     if (disabled) return;
-    const draftStart =
-      startDraft !== undefined ? isoFromLocal(startDraft, timeZone) : undefined;
     setDueDraft(undefined);
     setQuickConflict(false);
     setParseWarn(null);
     onChange(null);
-    if (draftStart !== undefined) {
+    if (startDraft !== undefined || startValue) {
       setStartDraft(undefined);
-      onStartChange?.(draftStart);
+      onStartChange?.(null);
     }
-  }
-
-  function cancelRange() {
-    if (disabled) return;
-    const draftDue =
-      dueDraft !== undefined ? isoFromLocal(dueDraft, timeZone) : undefined;
-    setStartDraft(undefined);
-    setDueDraft(undefined);
-    setQuickConflict(false);
-    setParseWarn(null);
-    setRangeExpanded(false);
-    onStartChange?.(null);
-    if (draftDue !== undefined) onChange(draftDue);
   }
 
   function quickSet(dayOffset: number) {
@@ -249,10 +238,11 @@ export function DateTimeField({
 
   return (
     <div className="space-y-3">
-      {rangeMode ? (
+      {showStart ? (
         <div className="space-y-2">
           <label className="label mb-0" htmlFor={`${id}-start`}>
             开始时间
+            <span className="ml-1 font-normal text-muted">（可不填）</span>
           </label>
           <div className="flex min-w-0 items-center gap-2">
             <div className="relative min-w-0 flex-1">
@@ -291,11 +281,9 @@ export function DateTimeField({
       ) : null}
 
       <div className="space-y-2">
-        {rangeMode ? (
-          <label className="label mb-0" htmlFor={id}>
-            结束时间
-          </label>
-        ) : null}
+        <label className="label mb-0" htmlFor={id}>
+          截止时间
+        </label>
         <div className="flex min-w-0 items-center gap-2">
           <div className="relative min-w-0 flex-1">
             <CalendarDays
@@ -309,9 +297,9 @@ export function DateTimeField({
               type="datetime-local"
               className="field min-h-10 min-w-0 pr-2 pl-9"
               value={dueLocal}
-              min={rangeMode ? startLocal || undefined : undefined}
+              min={showStart ? startLocal || undefined : undefined}
               disabled={disabled}
-              aria-label={rangeMode ? "结束日期和时间" : "截止日期和时间"}
+              aria-label="截止日期和时间"
               aria-describedby={`${id}-summary`}
               onChange={(event) => handleDueInput(event.target.value)}
             />
@@ -320,8 +308,8 @@ export function DateTimeField({
             <button
               type="button"
               className="icon-button shrink-0"
-              aria-label={rangeMode ? "清除结束时间" : "清除截止时间"}
-              title={rangeMode ? "清除结束时间" : "清除截止时间"}
+              aria-label="清除截止时间"
+              title="清除截止时间"
               onClick={clearDue}
               disabled={disabled}
             >
@@ -333,31 +321,15 @@ export function DateTimeField({
 
       {parseWarn || orderWarn ? (
         <p className="text-[13px] text-warn" role="status" aria-live="polite">
-          {parseWarn ?? RANGE_WARNING}
+          {parseWarn ?? warnText}
         </p>
       ) : null}
 
-      {!rangeMode ? (
-        <button
-          type="button"
-          className="btn btn-secondary min-h-10"
-          onClick={() => setRangeExpanded(true)}
-          disabled={disabled}
-        >
-          <CalendarRange size={16} strokeWidth={1.75} aria-hidden="true" />
-          设置时间段
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="btn btn-ghost min-h-10"
-          onClick={cancelRange}
-          disabled={disabled}
-        >
-          <X size={16} strokeWidth={1.75} aria-hidden="true" />
-          取消时间段
-        </button>
-      )}
+      {showStart && !startLocal ? (
+        <p className="hint">
+          只填截止时间就是一个时间点；填上开始时间就变成一段时间。
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <button
@@ -383,34 +355,21 @@ export function DateTimeField({
         id={`${id}-summary`}
         className="space-y-1 text-[13px] break-words text-muted"
       >
-        {rangeMode ? (
-          <>
-            <p>
-              开始：
-              {startDate ? formatFullDateTime(startDate, timeZone) : "未设置"}
-            </p>
-            {startDate && startDate.getTime() < now ? (
-              <p className="text-warn">开始时间已过</p>
-            ) : null}
-            <p>
-              结束：
-              {dueDate ? formatFullDateTime(dueDate, timeZone) : "未设置"}
-            </p>
-            {dueDate && dueDate.getTime() < now ? (
-              <p className="text-warn">截止时间已过，请确认是否需要调整。</p>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <p>
-              截止：
-              {dueDate ? formatFullDateTime(dueDate, timeZone) : "未设置"}
-            </p>
-            {dueDate && dueDate.getTime() < now ? (
-              <p className="text-warn">截止时间已过，请确认是否需要调整。</p>
-            ) : null}
-          </>
-        )}
+        {showStart && startDate ? (
+          <p>
+            开始：{formatFullDateTime(startDate, timeZone)}
+          </p>
+        ) : null}
+        {showStart && startDate && startDate.getTime() < now ? (
+          <p className="text-warn">开始时间已过</p>
+        ) : null}
+        <p>
+          截止：
+          {dueDate ? formatFullDateTime(dueDate, timeZone) : "未设置"}
+        </p>
+        {dueDate && dueDate.getTime() < now ? (
+          <p className="text-warn">截止时间已过，请确认是否需要调整。</p>
+        ) : null}
         <p className="flex items-center gap-1.5">
           <Clock3 size={13} aria-hidden="true" />
           时区：{timeZone}

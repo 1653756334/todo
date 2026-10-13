@@ -227,17 +227,21 @@ try {
     await page.locator('#detail-start-lead').waitFor();
     if(!(await page.locator('#detail-lead').count()))throw Error('区间任务应同时有开始与截止两条提醒');
     if(await page.getByPlaceholder('输入时间，如明天 18:00').count())throw Error('文字输入时间应已移除');
+    // 时间输入本身就是区间：开始与截止两个输入框直接可见，不需要先点开关
+    if(await page.getByRole('button',{name:'设置时间段',exact:true}).count())throw Error('时间输入不该藏在「设置时间段」按钮后面');
+    if(!(await page.getByLabel('开始日期和时间').isVisible()))throw Error('开始时间输入框应当直接可见');
+    if(!(await page.getByLabel('截止日期和时间').isVisible()))throw Error('截止时间输入框应当直接可见');
 
     // 结束时间挪到明天 → 仍然是合法区间
     const tz=admin.timezone;
     const startLocal=localInputValue(new Date(now+36*3600000),tz);
     const endLocal=localInputValue(new Date(now+38*3600000),tz);
-    await page.getByLabel('结束日期和时间').fill(endLocal);
+    await page.getByLabel('截止日期和时间').fill(endLocal);
     await waitForDb(async()=>{const t=await db.task.findUniqueOrThrow({where:{id:ongoing.id}});return !!t.startAt&&t.dueAt>new Date(now+3600000);},'新的结束时间没有保存');
 
     // 开始时间晚于结束时间 → 给出提示且不保存
     await page.getByLabel('开始日期和时间').fill(endLocal);
-    await page.getByText('开始时间要早于结束时间').first().waitFor();
+    await page.getByText('开始时间要早于截止时间').first().waitFor();
     const afterInvalid=await db.task.findUniqueOrThrow({where:{id:ongoing.id}});
     if(!(afterInvalid.startAt&&afterInvalid.startAt.getTime()<now))throw Error('开始时间晚于结束时间时不该保存');
 
@@ -248,6 +252,28 @@ try {
     await waitForDb(async()=>(await db.task.findUniqueOrThrow({where:{id:ongoing.id}})).startAt===null,'清除开始时间没有保存');
     const single=await db.task.findUniqueOrThrow({where:{id:ongoing.id}});
     if(!single.dueAt)throw Error('清除开始时间不该影响截止时间');
+
+    // 只填开始时间、还没填截止时间 → 提示且不保存
+    await page.getByRole('button',{name:'清除截止时间',exact:true}).click();
+    await waitForDb(async()=>(await db.task.findUniqueOrThrow({where:{id:ongoing.id}})).dueAt===null,'清除截止时间没有保存');
+    const noDue=await db.task.findUniqueOrThrow({where:{id:ongoing.id}});
+    if(noDue.startAt!==null)throw Error('清掉截止时间时开始时间应一并撤销');
+    await page.getByLabel('开始日期和时间').fill(startLocal);
+    await page.getByText('设置开始时间时也要有截止时间').first().waitFor();
+    await page.waitForTimeout(600);
+    if((await db.task.findUniqueOrThrow({where:{id:ongoing.id}})).startAt!==null)throw Error('只填开始时间不该保存');
+
+    // 新建任务弹窗同样是区间输入
+    await page.getByRole('button',{name:'关闭详情'}).click();
+    await page.locator('#detail-title').waitFor({state:'hidden'});
+    await page.getByRole('button',{name:'新建任务'}).first().click();
+    await page.locator('#task-title').waitFor();
+    const dialog=page.getByRole('dialog').first();
+    if(await dialog.getByRole('button',{name:'设置时间段',exact:true}).count())throw Error('新建任务的时间输入也应当是区间');
+    if(!(await dialog.getByLabel('开始日期和时间').isVisible()))throw Error('新建任务应有开始时间输入');
+    if(!(await dialog.getByLabel('截止日期和时间').isVisible()))throw Error('新建任务应有截止时间输入');
+    await page.keyboard.press('Escape');
+    await page.locator('#task-title').waitFor({state:'hidden'});
   });
   await check('分页后编辑保留已加载任务',async()=>{
     await db.task.createMany({data:Array.from({length:54},(_,index)=>({id:`${prefix}-page-${index}`,ownerId:admin.id,title:`分页验收任务 ${index}`,remindEnabled:false,createdAt:new Date(Date.now()-index*1000)}))});

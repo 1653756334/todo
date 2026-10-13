@@ -938,6 +938,7 @@ export function ImportDialog({
                               }
                               timeZone={timeZone}
                               disabled={busy}
+                              allowRange={false}
                             />
                           </div>
                         ) : null}
@@ -985,6 +986,7 @@ export function ImportDialog({
                                 }
                                 timeZone={timeZone}
                                 disabled={busy}
+                                allowRange={false}
                               />
                             </div>
                           ) : null}

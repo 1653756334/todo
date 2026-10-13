@@ -678,20 +678,18 @@ export function TaskDetail({
               className="text-muted"
               aria-hidden="true"
             />
-            <label htmlFor="detail-due">
-              {isRange ? "时间区间" : "截止时间"}
-            </label>
+            <label htmlFor="detail-due">时间</label>
             {taskActive ? (
               <span className="status-pill is-accent">进行中</span>
             ) : null}
           </h3>
-          {isRange ? (
+          {task.startAt && task.dueAt ? (
             <p className="text-[13px] leading-relaxed break-words text-muted">
-              开始 {formatFullDateTime(new Date(task.startAt!), timeZone)}
+              开始 {formatFullDateTime(new Date(task.startAt), timeZone)}
               <span className="mx-1.5" aria-hidden="true">
                 →
               </span>
-              结束 {formatFullDateTime(new Date(task.dueAt!), timeZone)}
+              截止 {formatFullDateTime(new Date(task.dueAt), timeZone)}
             </p>
           ) : null}
           <DateTimeField

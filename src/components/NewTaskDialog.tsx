@@ -278,7 +278,7 @@ export function NewTaskDialog({
               className="text-muted"
               aria-hidden="true"
             />
-            <label htmlFor="task-due">截止时间</label>
+            <label htmlFor="task-due">时间</label>
           </h3>
           <DateTimeField
             id="task-due"
@@ -289,9 +289,6 @@ export function NewTaskDialog({
             timeZone={timeZone}
             disabled={pending}
           />
-          {form.startAt && !form.dueAt ? (
-            <p className="hint text-warn" role="status">设置开始时间时也要有截止时间，请填写结束时间。</p>
-          ) : null}
           <p className="hint flex items-start gap-2" role="status"><Bell size={15} className="mt-0.5 shrink-0" aria-hidden="true" />{reminderText}</p>
         </section>
 
