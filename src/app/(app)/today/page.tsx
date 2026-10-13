@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { TaskWorkspace } from "@/components/TaskWorkspace";
 import { loadWorkspacePage } from "@/lib/workspace";
 import { formatDateLong } from "@/lib/time";
+import { taskDueTime } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export default async function TodayPage({searchParams}: {searchParams: Promise<{
   const { tasks, nextCursor, projects, timeZone, notify } =
     await loadWorkspacePage("today", {sort: params.sort});
   const overdue = tasks.filter(
-    (task) => task.dueAt && new Date(task.dueAt).getTime() < Date.now(),
+    (task) => taskDueTime(task) < Date.now(),
   ).length;
   return (
     <TaskWorkspace

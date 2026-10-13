@@ -46,8 +46,10 @@ import {
   LINK_KIND_LABELS,
   PRIORITY_LABELS,
   STATUS_LABELS,
+  taskIsActive,
   type NotifyPolicy,
   type ProjectOption,
+  type ReminderDTO,
   type TaskDTO,
 } from "@/lib/types";
 import { useToast } from "@/components/Toast";
@@ -96,7 +98,9 @@ export function TaskDetail({
   const [deleting, setDeleting] = useState(false);
   const [addingLink, setAddingLink] = useState(false);
   const [sourceLoading, setSourceLoading] = useState(false);
-  const [retryingReminder, setRetryingReminder] = useState(false);
+  const [retryingReminder, setRetryingReminder] = useState<
+    "start" | "end" | null
+  >(null);
   const requestsRef = useRef(new Set<Promise<TaskDTO>>());
   const textSaveRef = useRef<Promise<boolean> | null>(null);
   const failedPatchRef = useRef<Record<string, unknown> | null>(null);
@@ -113,6 +117,8 @@ export function TaskDetail({
   const timerRef = useRef<number | null>(null);
   const savedTimerRef = useRef<number | null>(null);
   const panelRef = useRef<HTMLElement>(null);
+  const timePatchRef = useRef<{ startAt?: string | null; dueAt?: string | null } | null>(null);
+  const timePatchTimer = useRef<number | null>(null);
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
   taskRef.current = task;
 
@@ -215,6 +221,24 @@ export function TaskDetail({
       }
     },
     [task.id, onUpdated],
+  );
+
+  // 时间字段一次操作可能带来两个变化（比如清掉截止时间时同时撤销开始时间），
+  // 合并成一次 PATCH，否则第二个请求会带着旧版本号撞 409。
+  const queueTimePatch = useCallback(
+    (next: { startAt?: string | null; dueAt?: string | null }) => {
+      timePatchRef.current = { ...timePatchRef.current, ...next };
+      if (timePatchTimer.current) return;
+      timePatchTimer.current = window.setTimeout(() => {
+        timePatchTimer.current = null;
+        const body = timePatchRef.current ?? {};
+        timePatchRef.current = null;
+        // 只有开始没有截止不算区间，清掉截止时把开始一起撤销。
+        if (body.dueAt === null && body.startAt === undefined && taskRef.current.startAt) body.startAt = null;
+        void patch(body);
+      }, 0);
+    },
+    [patch],
   );
 
   function saveText(): Promise<boolean> {
@@ -382,9 +406,64 @@ export function TaskDetail({
   }, [showSource, task.id, task.sourceId]);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => { if (dirtyFields.current.size || failedPatchRef.current || saveState === "saving") { e.preventDefault(); } };
-    window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn);
+    window.addEventListener("beforeunload", warn); return () => { window.removeEventListener("beforeunload", warn); if (timePatchTimer.current) { window.clearTimeout(timePatchTimer.current); timePatchTimer.current = null; } };
   }, [saveState]);
-  const reminder = reminderStatus(task, timeZone, notify);
+  const isRange = Boolean(task.startAt && task.dueAt);
+  const taskActive = taskIsActive(task);
+  const reminderPlan = reminderPlanStatus(task, isRange, notify);
+
+  async function retryReminder(reminder: ReminderDTO) {
+    if (retryingReminder) return;
+    setRetryingReminder(reminder.slot === "start" ? "start" : "end");
+    try {
+      await apiFetch(`/api/reminders/${reminder.id}/retry`, { method: "POST" });
+      toast.show({ message: "已安排重新发送" });
+      router.refresh();
+    } catch (err) {
+      toast.show({ message: (err as Error).message, tone: "error" });
+    } finally {
+      setRetryingReminder(null);
+    }
+  }
+
+  function renderReminderDetail(reminder: ReminderDTO | null, view: ReminderView) {
+    return (
+      <div className="space-y-2">
+        <p
+          className={`text-[13px] leading-relaxed break-words ${view.tone === "error" ? "text-danger" : view.tone === "warn" ? "text-warn" : "text-muted"}`}
+        >
+          {view.text}
+        </p>
+        {view.channels ? (
+          <p className="text-[13px] leading-relaxed break-words text-muted">
+            {view.channels}
+          </p>
+        ) : null}
+        {view.action === "settings" ? (
+          <button
+            type="button"
+            className="btn btn-secondary min-h-10"
+            onClick={() => router.push("/settings/email")}
+          >
+            <Settings2 size={16} aria-hidden="true" />
+            设置通知渠道
+          </button>
+        ) : null}
+        {view.action === "retry" && reminder ? (
+          <button
+            type="button"
+            className="btn btn-secondary min-h-10"
+            disabled={retryingReminder === reminder.slot}
+            onClick={() => void retryReminder(reminder)}
+          >
+            <RotateCcw size={16} aria-hidden="true" />
+            {retryingReminder === reminder.slot ? "正在安排…" : "重试发送"}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <>
     <ConfirmDialog open={confirmClose} onOpenChange={value => { setConfirmClose(value); if (!value) pendingDestinationRef.current = null; }} title="离开前有修改未保存" description="修改未能保存。取消可继续编辑或重试保存；放弃后将丢失这些修改。" confirmLabel="放弃修改并离开" onConfirm={() => { if (timerRef.current) window.clearTimeout(timerRef.current); const next = pendingDestinationRef.current ?? onClose; pendingDestinationRef.current = null; next(); }} />
@@ -599,13 +678,29 @@ export function TaskDetail({
               className="text-muted"
               aria-hidden="true"
             />
-            <label htmlFor="detail-due">截止时间</label>
+            <label htmlFor="detail-due">
+              {isRange ? "时间区间" : "截止时间"}
+            </label>
+            {taskActive ? (
+              <span className="status-pill is-accent">进行中</span>
+            ) : null}
           </h3>
+          {isRange ? (
+            <p className="text-[13px] leading-relaxed break-words text-muted">
+              开始 {formatFullDateTime(new Date(task.startAt!), timeZone)}
+              <span className="mx-1.5" aria-hidden="true">
+                →
+              </span>
+              结束 {formatFullDateTime(new Date(task.dueAt!), timeZone)}
+            </p>
+          ) : null}
           <DateTimeField
             key={task.id}
             id="detail-due"
             value={task.dueAt}
-            onChange={(iso) => void patch({ dueAt: iso })}
+            startValue={task.startAt}
+            onChange={(iso) => queueTimePatch({ dueAt: iso })}
+            onStartChange={(iso) => queueTimePatch({ startAt: iso })}
             timeZone={timeZone}
             disabled={saveState === "saving"}
           />
@@ -707,82 +802,138 @@ export function TaskDetail({
                   void patch({ remindEnabled: event.target.checked })
                 }
               />
-              启用截止前提醒
+              启用提醒
             </label>
             {task.dueAt ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-[13px]">
-                  <label htmlFor="detail-lead">提前</label>
-                  <input
-                    key={`${task.id}-${task.remindLeadMin}`}
-                    id="detail-lead"
-                    type="number"
-                    min={1}
-                    max={20160}
-                    className="field min-h-10 max-w-[100px]"
-                    defaultValue={task.remindLeadMin}
-                    disabled={!task.remindEnabled || saveState === "saving"}
-                    onBlur={(event) => {
-                      const value = Number(event.target.value);
-                      if (
-                        Number.isInteger(value) &&
-                        value > 0 &&
-                        value <= 20160 &&
-                        value !== task.remindLeadMin
-                      )
-                        void patch({ remindLeadMin: value });
-                      else {
-                        event.target.value = String(task.remindLeadMin);
-                        if (!Number.isInteger(value) || value < 1 || value > 20160) toast.show({ message: "提前时间需为 1 至 20160 的整数分钟", tone: "error" });
-                      }
-                    }}
-                  />
-                  <span className="text-muted">分钟</span>
+              isRange ? (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-[13px]">
+                      <label htmlFor="detail-start-lead">开始前</label>
+                      <input
+                        key={`${task.id}-start-${task.remindStartLeadMin}`}
+                        id="detail-start-lead"
+                        type="number"
+                        min={0}
+                        max={20160}
+                        className="field min-h-10 max-w-[100px]"
+                        defaultValue={task.remindStartLeadMin}
+                        disabled={!task.remindEnabled || saveState === "saving"}
+                        onBlur={(event) => {
+                          const value = Number(event.target.value);
+                          if (
+                            Number.isInteger(value) &&
+                            value >= 0 &&
+                            value <= 20160 &&
+                            value !== task.remindStartLeadMin
+                          )
+                            void patch({ remindStartLeadMin: value });
+                          else {
+                            event.target.value = String(task.remindStartLeadMin);
+                            if (!Number.isInteger(value) || value < 0 || value > 20160) toast.show({ message: "开始前提醒需为 0 至 20160 的整数分钟", tone: "error" });
+                          }
+                        }}
+                      />
+                      <span className="text-muted">分钟</span>
+                    </div>
+                    <p className="hint">
+                      {task.remindStartLeadMin === 0
+                        ? "开始时提醒。"
+                        : `开始前提醒，当前提前 ${leadMinutesLabel(task.remindStartLeadMin)}。`}
+                    </p>
+                    {reminderPlan.blocked
+                      ? null
+                      : renderReminderDetail(
+                          task.reminders.start,
+                          reminderStatus(task.reminders.start, timeZone, reminderPlan.channels),
+                        )}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-[13px]">
+                      <label htmlFor="detail-lead">截止前</label>
+                      <input
+                        key={`${task.id}-${task.remindLeadMin}`}
+                        id="detail-lead"
+                        type="number"
+                        min={1}
+                        max={20160}
+                        className="field min-h-10 max-w-[100px]"
+                        defaultValue={task.remindLeadMin}
+                        disabled={!task.remindEnabled || saveState === "saving"}
+                        onBlur={(event) => {
+                          const value = Number(event.target.value);
+                          if (
+                            Number.isInteger(value) &&
+                            value > 0 &&
+                            value <= 20160 &&
+                            value !== task.remindLeadMin
+                          )
+                            void patch({ remindLeadMin: value });
+                          else {
+                            event.target.value = String(task.remindLeadMin);
+                            if (!Number.isInteger(value) || value < 1 || value > 20160) toast.show({ message: "提前时间需为 1 至 20160 的整数分钟", tone: "error" });
+                          }
+                        }}
+                      />
+                      <span className="text-muted">分钟</span>
+                    </div>
+                    <p className="hint">
+                      截止时间前提醒，当前提前 {leadMinutesLabel(task.remindLeadMin)}
+                    </p>
+                    {reminderPlan.blocked
+                      ? null
+                      : renderReminderDetail(
+                          task.reminders.end,
+                          reminderStatus(task.reminders.end, timeZone, reminderPlan.channels),
+                        )}
+                  </div>
+                  {reminderPlan.blocked
+                    ? renderReminderDetail(null, reminderPlan.blocked)
+                    : null}
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-[13px]">
+                    <label htmlFor="detail-lead">提前</label>
+                    <input
+                      key={`${task.id}-${task.remindLeadMin}`}
+                      id="detail-lead"
+                      type="number"
+                      min={1}
+                      max={20160}
+                      className="field min-h-10 max-w-[100px]"
+                      defaultValue={task.remindLeadMin}
+                      disabled={!task.remindEnabled || saveState === "saving"}
+                      onBlur={(event) => {
+                        const value = Number(event.target.value);
+                        if (
+                          Number.isInteger(value) &&
+                          value > 0 &&
+                          value <= 20160 &&
+                          value !== task.remindLeadMin
+                        )
+                          void patch({ remindLeadMin: value });
+                        else {
+                          event.target.value = String(task.remindLeadMin);
+                          if (!Number.isInteger(value) || value < 1 || value > 20160) toast.show({ message: "提前时间需为 1 至 20160 的整数分钟", tone: "error" });
+                        }
+                      }}
+                    />
+                    <span className="text-muted">分钟</span>
+                  </div>
+                  <p className="hint">
+                    当前提前 {leadMinutesLabel(task.remindLeadMin)}
+                  </p>
+                  {reminderPlan.blocked
+                    ? renderReminderDetail(null, reminderPlan.blocked)
+                    : renderReminderDetail(
+                        task.reminders.end,
+                        reminderStatus(task.reminders.end, timeZone, reminderPlan.channels),
+                      )}
                 </div>
-                <p className="hint">
-                  当前提前 {leadMinutesLabel(task.remindLeadMin)}
-                </p>
-              </div>
-            ) : null}
-            <p
-              className={`text-[13px] leading-relaxed break-words ${reminder.tone === "error" ? "text-danger" : reminder.tone === "warn" ? "text-warn" : "text-muted"}`}
-            >
-              {reminder.text}
-            </p>
-            {reminder.channels ? (
-              <p className="text-[13px] leading-relaxed break-words text-muted">
-                {reminder.channels}
-              </p>
-            ) : null}
-            {reminder.action === "settings" ? (
-              <button
-                type="button"
-                className="btn btn-secondary min-h-10"
-                onClick={() => router.push("/settings/email")}
-              >
-                <Settings2 size={16} aria-hidden="true" />
-                设置通知渠道
-              </button>
-            ) : null}
-            {reminder.action === "retry" ? (
-              <button
-                type="button"
-                className="btn btn-secondary min-h-10"
-                disabled={retryingReminder}
-                onClick={async () => {
-                  if (!task.reminder || retryingReminder) return;
-                  setRetryingReminder(true);
-                  try {
-                    await apiFetch(`/api/reminders/${task.reminder.id}/retry`, { method: "POST" });
-                    toast.show({ message: "已安排重新发送" });
-                    router.refresh();
-                  } catch (err) { toast.show({ message: (err as Error).message, tone: "error" }); }
-                  finally { setRetryingReminder(false); }
-                }}
-              >
-                <RotateCcw size={16} aria-hidden="true" />
-                {retryingReminder ? "正在安排…" : "重试发送"}
-              </button>
+              )
+            ) : reminderPlan.blocked ? (
+              renderReminderDetail(null, reminderPlan.blocked)
             ) : null}
           </div>
         </section>
@@ -996,15 +1147,32 @@ type ReminderView = {
   channels?: string;
 };
 
-export function reminderStatus(
+type ReminderPlan =
+  | { blocked: ReminderView; channels?: undefined }
+  | { blocked: null; channels: string };
+
+/**
+ * 提醒的整体可用性：任务状态、截止时间、总开关与通知渠道。
+ * 与具体锚点（开始 / 截止）无关，决定展示全局提示还是逐条锚点状态。
+ */
+export function reminderPlanStatus(
   task: TaskDTO,
-  timeZone: string,
+  isRange: boolean,
   notify: NotifyPolicy,
-): ReminderView {
+): ReminderPlan {
   if (task.status === "done")
-    return { text: "任务已完成，提醒已取消。", tone: "muted" };
-  if (!task.dueAt) return { text: "先设置截止时间以启用提醒。", tone: "muted" };
-  if (!task.remindEnabled) return { text: "提醒已关闭。", tone: "muted" };
+    return { blocked: { text: "任务已完成，提醒已取消。", tone: "muted" } };
+  if (!task.dueAt)
+    return { blocked: { text: "先设置截止时间以启用提醒。", tone: "muted" } };
+  if (!task.remindEnabled)
+    return {
+      blocked: {
+        text: isRange
+          ? "提醒已关闭，开始和截止时间都不会通知。"
+          : "提醒已关闭。",
+        tone: "muted",
+      },
+    };
 
   const plan = channelPlan({
     priority: task.priority,
@@ -1013,54 +1181,68 @@ export function reminderStatus(
   });
   if (!plan.configured)
     return {
-      text: "邮件与推送渠道都未配置。",
-      tone: "warn",
-      action: "settings",
+      blocked: {
+        text: "邮件与推送渠道都未配置。",
+        tone: "warn",
+        action: "settings",
+      },
     };
   // 渠道都配好了，但当前优先级达不到任何一个门槛：本来就不该发送
   if (!plan.email && !plan.bot)
     return {
-      text: `${suppressionReason({ priority: task.priority, plan })}。`,
-      tone: "muted",
-      channels: "可在「设置 → 邮件通知 / 群机器人」里调整触发优先级。",
+      blocked: {
+        text: `${suppressionReason({ priority: task.priority, plan })}。`,
+        tone: "muted",
+        channels: "可在「设置 → 邮件通知 / 群机器人」里调整触发优先级。",
+      },
     };
-  const channels = channelSummary({ priority: task.priority, plan });
+  return {
+    blocked: null,
+    channels: channelSummary({ priority: task.priority, plan }),
+  };
+}
 
-  const reminder = task.reminder;
+/** 单个锚点（开始 / 截止）的提醒状态。 */
+export function reminderStatus(
+  reminder: ReminderDTO | null,
+  timeZone: string,
+  channels: string,
+): ReminderView {
   if (!reminder)
     return {
       text: "提醒计划尚未生成，保存后会自动安排。",
       tone: "warn",
       channels,
     };
+  const slotLabel = reminder.slot === "start" ? "开始" : "截止";
   switch (reminder.status) {
     case "pending": {
       const trigger = new Date(reminder.triggerAt);
       if (trigger.getTime() <= Date.now())
         return {
-          text: "距截止不足提前量，将尽快发送提醒。",
+          text: `距${slotLabel}不足提前量，将尽快发送提醒。`,
           tone: "warn",
           channels,
         };
       return {
-        text: `将于 ${formatFullDateTime(trigger, timeZone)} 发送提醒（${relativeFromNow(trigger)}）。`,
+        text: `将于 ${formatFullDateTime(trigger, timeZone)} 发送${slotLabel}提醒（${relativeFromNow(trigger)}）。`,
         tone: "muted",
         channels,
       };
     }
     case "claimed":
-      return { text: "提醒发送中。", tone: "warn", channels };
+      return { text: `${slotLabel}提醒发送中。`, tone: "warn", channels };
     case "sent":
       return {
-        text: `提醒已提交发送${reminder.sentAt ? ` · ${formatDateTimeShort(new Date(reminder.sentAt), timeZone)}` : ""}。`,
+        text: `${slotLabel}提醒已提交发送${reminder.sentAt ? ` · ${formatDateTimeShort(new Date(reminder.sentAt), timeZone)}` : ""}。`,
         tone: "muted",
         channels,
       };
     case "partial":
-      return { text: "部分渠道已提交成功，请在提醒记录查看失败渠道。", tone: "muted", action: "retry", channels };
+      return { text: `${slotLabel}提醒部分渠道已提交成功，请在提醒记录查看失败渠道。`, tone: "muted", action: "retry", channels };
     case "failed":
       return {
-        text: `提醒发送失败（已重试 ${reminder.attempt} 次）：${reminder.lastError ?? "原因未知"}`,
+        text: `${slotLabel}提醒发送失败（已重试 ${reminder.attempt} 次）：${reminder.lastError ?? "原因未知"}`,
         tone: "error",
         action: "retry",
         channels,
@@ -1070,13 +1252,13 @@ export function reminderStatus(
       // 门槛调低后同一个任务仍显示这条记录，可以直接手动发一次。
       return {
         text: reminder.lastError
-          ? `提醒已取消：${reminder.lastError}`
-          : "提醒已取消。",
+          ? `${slotLabel}提醒已取消：${reminder.lastError}`
+          : `${slotLabel}提醒已取消。`,
         tone: "muted",
         action: reminder.lastError ? "retry" : undefined,
         channels,
       };
     default:
-      return { text: `提醒状态：${reminder.status}`, tone: "muted", channels };
+      return { text: `${slotLabel}提醒状态：${reminder.status}`, tone: "muted", channels };
   }
 }

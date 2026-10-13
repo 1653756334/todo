@@ -30,6 +30,20 @@ async function check(name, run) {
   try { await run(); results.push({name, pass:true}); console.log(`PASS ${name}`); }
   catch (error) { results.push({name, pass:false, error:error.message}); console.log(`FAIL ${name}: ${error.message}`); await page.screenshot({path: `.run/ui-artifacts/failure-${results.length}.png`, fullPage:true}).catch(()=>{}); }
 }
+/** 等数据库里的变化落盘，避免依赖固定等待时间 */
+async function waitForDb(probe, message, timeout = 8000) {
+  const deadline = Date.now() + timeout;
+  for (;;) {
+    if (await probe()) return;
+    if (Date.now() > deadline) throw Error(message);
+    await page.waitForTimeout(150);
+  }
+}
+/** 某时区的墙上时间，用于填 datetime-local */
+function localInputValue(date, timeZone) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {timeZone, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false}).formatToParts(date).map(part => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
 async function open(path) {
   await page.goto(`${base}${path}`, {waitUntil:'load'});
   await page.locator('h1').first().waitFor();
@@ -196,6 +210,44 @@ try {
     await page.getByRole('button',{name:'关闭详情',exact:true}).click();
     await page.locator('#detail-title').waitFor({state:'hidden'});
     if((await db.task.findUniqueOrThrow({where:{id:task.id}})).title!=='网络失败时的草稿')throw Error('重试未保存');
+  });
+  await check('时间段：区间显示、两条提醒与顺序校验',async()=>{
+    const now=Date.now();
+    const ongoing=await db.task.create({data:{ownerId:admin.id,title:'区间验收进行中',startAt:new Date(now-3600000),dueAt:new Date(now+3600000),remindStartLeadMin:15}});
+    targets.push(ongoing.id);
+    await open('/tasks');
+    const row=page.locator(`[data-task-row="${ongoing.id}"]`);
+    await row.waitFor();
+    const rowText=(await row.innerText()).replace(/\s+/g,'');
+    if(!rowText.includes('–'))throw Error('列表没有显示时间区间');
+    if(!rowText.includes('进行中'))throw Error('区间内没有显示进行中');
+    if((await db.task.findUniqueOrThrow({where:{id:ongoing.id}})).status!=='todo')throw Error('进行中不该改写任务状态');
+
+    await page.getByRole('button',{name:'打开「区间验收进行中」',exact:true}).click();
+    await page.locator('#detail-start-lead').waitFor();
+    if(!(await page.locator('#detail-lead').count()))throw Error('区间任务应同时有开始与截止两条提醒');
+    if(await page.getByPlaceholder('输入时间，如明天 18:00').count())throw Error('文字输入时间应已移除');
+
+    // 结束时间挪到明天 → 仍然是合法区间
+    const tz=admin.timezone;
+    const startLocal=localInputValue(new Date(now+36*3600000),tz);
+    const endLocal=localInputValue(new Date(now+38*3600000),tz);
+    await page.getByLabel('结束日期和时间').fill(endLocal);
+    await waitForDb(async()=>{const t=await db.task.findUniqueOrThrow({where:{id:ongoing.id}});return !!t.startAt&&t.dueAt>new Date(now+3600000);},'新的结束时间没有保存');
+
+    // 开始时间晚于结束时间 → 给出提示且不保存
+    await page.getByLabel('开始日期和时间').fill(endLocal);
+    await page.getByText('开始时间要早于结束时间').first().waitFor();
+    const afterInvalid=await db.task.findUniqueOrThrow({where:{id:ongoing.id}});
+    if(!(afterInvalid.startAt&&afterInvalid.startAt.getTime()<now))throw Error('开始时间晚于结束时间时不该保存');
+
+    // 改成合法区间 → 保存；再清除开始时间 → 回到单点且截止时间保留
+    await page.getByLabel('开始日期和时间').fill(startLocal);
+    await waitForDb(async()=>(await db.task.findUniqueOrThrow({where:{id:ongoing.id}})).startAt>new Date(now+3600000),'区间开始时间没有保存');
+    await page.getByRole('button',{name:'清除开始时间',exact:true}).click();
+    await waitForDb(async()=>(await db.task.findUniqueOrThrow({where:{id:ongoing.id}})).startAt===null,'清除开始时间没有保存');
+    const single=await db.task.findUniqueOrThrow({where:{id:ongoing.id}});
+    if(!single.dueAt)throw Error('清除开始时间不该影响截止时间');
   });
   await check('分页后编辑保留已加载任务',async()=>{
     await db.task.createMany({data:Array.from({length:54},(_,index)=>({id:`${prefix}-page-${index}`,ownerId:admin.id,title:`分页验收任务 ${index}`,remindEnabled:false,createdAt:new Date(Date.now()-index*1000)}))});

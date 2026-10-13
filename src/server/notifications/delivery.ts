@@ -10,12 +10,13 @@ export type SendDelivery = (data: Awaited<ReturnType<typeof loadDelivery>> & {})
 function loadDelivery(id:string) {return prisma.notificationDelivery.findUnique({where:{id},include:{channel:true,reminder:{include:{task:{include:{project:true}},recipient:{include:{preference:true}}}}}});}
 async function send(d:NonNullable<Awaited<ReturnType<typeof loadDelivery>>>) {
  const c=d.channel!; const t=d.reminder.task,u=d.reminder.recipient;
+ const anchorLabel=d.reminder.slot==="start"?"开始":"截止";
  if(c.type==="EMAIL") {
   const smtp=await smtpConfig(); if(!smtp || !c.email)throw new Error("CONFIG_ERROR");const transport=buildTransport(smtp);
-  try {const m=renderReminderMail({title:t.title,projectName:t.project?.name,dueAt:t.dueAt!,timeZone:u.timezone,notes:c.brief?null:t.notes,taskId:t.id});await transport.sendMail({from:fromHeader(smtp),to:c.email,...(c.brief?{subject:"Todo 任务提醒",text:`你有任务即将到期，请打开 ${appUrl()}/tasks?task=${t.id}`} :m),messageId:`<todo-${d.id}@todo.local>`});}finally{transport.close();}
+  try {const m=renderReminderMail({title:t.title,projectName:t.project?.name,anchorAt:d.reminder.dueSnapshot,anchorLabel,timeZone:u.timezone,notes:c.brief?null:t.notes,taskId:t.id});await transport.sendMail({from:fromHeader(smtp),to:c.email,...(c.brief?{subject:`${anchorLabel}提醒：${t.title}`,text:`你有任务的${anchorLabel}时间快到了，请打开 ${appUrl()}/tasks?task=${t.id}`} :m),messageId:`<todo-${d.id}@todo.local>`});}finally{transport.close();}
  }else{
   if(!c.webhookEncrypted)throw new Error("CONFIG_ERROR");
-  await publishBot({webhook:decryptSecret(c.webhookEncrypted,encryptionKey()),secret:c.signSecretEncrypted?decryptSecret(c.signSecretEncrypted,encryptionKey()):undefined,title:t.title,lines:[`截止：${formatFullDateTime(t.dueAt!,u.timezone)}`],clickUrl:`${appUrl()}/tasks?task=${t.id}`,brief:c.brief});
+  await publishBot({webhook:decryptSecret(c.webhookEncrypted,encryptionKey()),secret:c.signSecretEncrypted?decryptSecret(c.signSecretEncrypted,encryptionKey()):undefined,title:t.title,lines:[`${anchorLabel}：${formatFullDateTime(d.reminder.dueSnapshot,u.timezone)}`],clickUrl:`${appUrl()}/tasks?task=${t.id}`,brief:c.brief});
  }
 }
 export async function summarizeReminder(id:string) {

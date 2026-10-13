@@ -58,26 +58,29 @@ export async function sendTestMail(config: SmtpConfig): Promise<{ messageId: str
 export type ReminderMail = {
   title: string;
   projectName?: string | null;
-  dueAt: Date;
+  /** 这次提醒对应的时刻（区间开始或截止），不是任务的全部时间。 */
+  anchorAt: Date;
+  /** 时刻的称呼，用于正文与主题：「开始」或「截止」。 */
+  anchorLabel: string;
   timeZone: string;
   notes?: string | null;
   taskId: string;
 };
 
 export function renderReminderMail(mail: ReminderMail) {
-  const due = formatFullDateTime(mail.dueAt, mail.timeZone);
+  const anchor = formatFullDateTime(mail.anchorAt, mail.timeZone);
   const link = `${appUrl()}/tasks?task=${mail.taskId}`;
   const lines = [
     `任务：${mail.title}`,
   ];
   if (mail.projectName) lines.push(`项目：${mail.projectName}`);
-  lines.push(`截止：${due}`);
+  lines.push(`${mail.anchorLabel}：${anchor}`);
   if (mail.notes) {
     lines.push("", "说明：", mail.notes.slice(0, 1000));
   }
   lines.push("", link);
   return {
-    subject: `即将到期：${mail.title}`,
+    subject: mail.anchorLabel === "开始" ? `该开始了：${mail.title}` : `即将到期：${mail.title}`,
     text: lines.join("\n"),
   };
 }

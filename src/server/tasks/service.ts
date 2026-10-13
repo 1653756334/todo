@@ -5,6 +5,11 @@ import { assert } from "@/shared/errors";
 import { taskCreateSchema, taskPatchSchema, bulkSchema } from "@/shared/tasks";
 import { replanTask } from "@/server/notifications/service";
 import { taskInclude, serializeTask } from "./queries";
+/** 时间区间校验：要么只有一个截止时间，要么是「开始 < 截止」。 */
+export function assertTimeRange(startAt: Date | null, dueAt: Date | null) {
+  if (startAt && !dueAt) assert(false, 400, "设置开始时间时也要有截止时间");
+  if (startAt && dueAt) assert(startAt.getTime() < dueAt.getTime(), 400, "开始时间要早于截止时间");
+}
 export async function checkProject(tx: Prisma.TransactionClient, actor: Actor, id: string | null | undefined) {
   if (!id) return;
   const p = await tx.project.findFirst({ where: { id, ownerId: actor.id } });
@@ -14,8 +19,10 @@ export async function createTaskTx(tx: Prisma.TransactionClient, actor: Actor, i
   const b = taskCreateSchema.parse(input); await checkProject(tx,actor,b.projectId);
   if (b.clientMutationId) { const existing = await tx.task.findFirst({ where: { ownerId: actor.id, clientMutationId: b.clientMutationId }, include: taskInclude }); if (existing) return serializeTask(existing); }
   const defaults = await tx.userPreference.findUnique({where:{userId:actor.id}});
-  const {tags,links,dueAt,...fields}=b;
-  const t=await tx.task.create({ data: { ...fields, ownerId:actor.id, dueAt:dueAt ? new Date(dueAt) : null, remindEnabled:b.remindEnabled ?? defaults?.remindEnabled ?? true, remindLeadMin:b.remindLeadMin ?? defaults?.remindLeadMin ?? 60, completedAt:b.status === "done" ? new Date() : null, sourceId, tags:{create:tags?.map(tag=>({tag})) ?? []},links:{create:links ?? []} } });
+  const {tags,links,startAt,dueAt,...fields}=b;
+  const start=startAt ? new Date(startAt) : null, due=dueAt ? new Date(dueAt) : null;
+  assertTimeRange(start,due);
+  const t=await tx.task.create({ data: { ...fields, ownerId:actor.id, startAt:start, dueAt:due, sortAt:start ?? due, remindEnabled:b.remindEnabled ?? defaults?.remindEnabled ?? true, remindLeadMin:b.remindLeadMin ?? defaults?.remindLeadMin ?? 60, remindStartLeadMin:b.remindStartLeadMin ?? 0, completedAt:b.status === "done" ? new Date() : null, sourceId, tags:{create:tags?.map(tag=>({tag})) ?? []},links:{create:links ?? []} } });
   await replanTask(tx,t.id); return serializeTask(await tx.task.findUniqueOrThrow({where:{id:t.id},include:taskInclude}));
 }
 export async function createTask(actor: Actor,input:unknown) {
@@ -28,11 +35,15 @@ export async function updateTaskTx(tx:Prisma.TransactionClient,actor:Actor,id:st
   if (b.clientMutationId && old.lastMutationId === b.clientMutationId) return serializeTask(old);
   assert(old.revision === b.expectedRevision,409,"任务已被修改，请加载最新内容", "CONFLICT");
   assert(!old.project?.archivedAt,409,"归档项目只读"); await checkProject(tx,actor,b.projectId);
-  const {tags,links,dueAt,expectedRevision,clientMutationId,...fields}=b;
-  const data: Prisma.TaskUncheckedUpdateInput={...fields};
-  if(dueAt !== undefined) data.dueAt=dueAt ? new Date(dueAt) : null;
+  const {tags,links,startAt,dueAt,expectedRevision,clientMutationId,...fields}=b;
+  const nextStart=startAt !== undefined ? (startAt ? new Date(startAt) : null) : old.startAt;
+  const nextDue=dueAt !== undefined ? (dueAt ? new Date(dueAt) : null) : old.dueAt;
+  if (startAt !== undefined || dueAt !== undefined) assertTimeRange(nextStart,nextDue);
+  const data: Prisma.TaskUncheckedUpdateInput={...fields, sortAt:nextStart ?? nextDue};
+  if(startAt !== undefined) data.startAt=nextStart;
+  if(dueAt !== undefined) data.dueAt=nextDue;
   if(b.status !== undefined && b.status !== old.status) data.completedAt=b.status === "done" ? new Date() : null;
-  const changed = Object.entries(fields).some(([k,v])=>old[k as keyof typeof old] !== v) || dueAt !== undefined && (old.dueAt?.toISOString() ?? null) !== (dueAt ? new Date(dueAt).toISOString() : null) || tags !== undefined && JSON.stringify([...tags].sort()) !== JSON.stringify(old.tags.map(x=>x.tag).sort()) || links !== undefined && JSON.stringify(links) !== JSON.stringify(old.links);
+  const changed = Object.entries(fields).some(([k,v])=>old[k as keyof typeof old] !== v) || startAt !== undefined && (old.startAt?.toISOString() ?? null) !== (nextStart?.toISOString() ?? null) || dueAt !== undefined && (old.dueAt?.toISOString() ?? null) !== (nextDue?.toISOString() ?? null) || tags !== undefined && JSON.stringify([...tags].sort()) !== JSON.stringify(old.tags.map(x=>x.tag).sort()) || links !== undefined && JSON.stringify(links) !== JSON.stringify(old.links);
   if(!changed) return serializeTask(old);
   await tx.task.update({where:{id},data:{...data,revision:{increment:1},lastMutationId:clientMutationId ?? null}});
   if(tags !== undefined) {await tx.taskTag.deleteMany({where:{taskId:id}}); if(tags.length) await tx.taskTag.createMany({data:tags.map(tag=>({taskId:id,tag}))});}

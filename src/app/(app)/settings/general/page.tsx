@@ -22,7 +22,7 @@ export default async function GeneralSettingsPage() {
         <p className="section-description mt-1">
           检查提醒服务是否可用。通知能否送达，还取决于个人渠道配置和任务的提醒设置。
         </p>
-        <ReminderServiceStatus />
+        <ReminderServiceStatus timeZone={user.timezone} />
       </section>
     </ContentTransition>
   );

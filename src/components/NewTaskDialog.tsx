@@ -35,6 +35,7 @@ const EMPTY = {
   notes: "",
   projectId: "",
   priority: "normal",
+  startAt: null as string | null,
   dueAt: null as string | null,
   remindEnabled: true,
   remindLeadMin: 60,
@@ -92,7 +93,7 @@ export function NewTaskDialog({
 
   function requestClose() {
     if (pending) return;
-    if (form.title.trim() || form.notes.trim() || form.dueAt) {
+    if (form.title.trim() || form.notes.trim() || form.dueAt || form.startAt) {
       setConfirmClose(true);
       return;
     }
@@ -105,6 +106,10 @@ export function NewTaskDialog({
     if (!form.title.trim()) {
       setError("标题不能为空");
       document.getElementById("task-title")?.focus();
+      return;
+    }
+    if (form.startAt && !form.dueAt) {
+      setError("设置开始时间时也要有截止时间");
       return;
     }
     if (!Number.isInteger(form.remindLeadMin) || form.remindLeadMin < 1 || form.remindLeadMin > 20160) {
@@ -124,6 +129,7 @@ export function NewTaskDialog({
           notes: form.notes.trim() || null,
           projectId: form.projectId || null,
           priority: form.priority,
+          startAt: form.startAt,
           dueAt: form.dueAt,
           remindEnabled: form.remindEnabled,
           remindLeadMin: form.remindLeadMin,
@@ -174,7 +180,7 @@ export function NewTaskDialog({
             type="submit"
             form="new-task-form"
             className="btn btn-primary"
-            disabled={pending || loadingDefaults}
+            disabled={pending || loadingDefaults || (!!form.startAt && !form.dueAt)}
           >
             <Plus size={17} strokeWidth={1.75} aria-hidden="true" />
             {pending ? "正在创建…" : loadingDefaults ? "加载提醒设置…" : "创建任务"}
@@ -277,10 +283,15 @@ export function NewTaskDialog({
           <DateTimeField
             id="task-due"
             value={form.dueAt}
-            onChange={(iso) => setForm({ ...form, dueAt: iso })}
+            startValue={form.startAt}
+            onChange={(iso) => setForm({ ...form, dueAt: iso, ...(iso === null ? { startAt: null } : {}) })}
+            onStartChange={(iso) => setForm({ ...form, startAt: iso })}
             timeZone={timeZone}
             disabled={pending}
           />
+          {form.startAt && !form.dueAt ? (
+            <p className="hint text-warn" role="status">设置开始时间时也要有截止时间，请填写结束时间。</p>
+          ) : null}
           <p className="hint flex items-start gap-2" role="status"><Bell size={15} className="mt-0.5 shrink-0" aria-hidden="true" />{reminderText}</p>
         </section>
 

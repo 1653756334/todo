@@ -184,3 +184,43 @@ export function leadMinutesLabel(minutes: number): string {
   }
   return `${minutes} 分钟`;
 }
+
+export type TaskTimeInfo = {
+  /** 「今天 14:00–16:00」这样的简短标签 */
+  text: string;
+  /** 结束时间已过 */
+  overdue: boolean;
+  /** 现在正落在区间里 */
+  active: boolean;
+  /** 有开始和截止两个时间 */
+  hasRange: boolean;
+  /** 与今天有关（列表高亮用） */
+  today: boolean;
+};
+
+/**
+ * 任务时间的简短展示：只有一个截止时间就是「今天 18:00」，
+ * 有区间就是「今天 14:00–16:00」（跨天写成「今天 22:00–明天 01:00」）。
+ */
+export function formatTaskTime(
+  startAt: Date | null,
+  dueAt: Date | null,
+  timeZone: string,
+  now: Date = new Date(),
+): TaskTimeInfo | null {
+  const start = startAt && dueAt ? startAt : null;
+  const anchor = dueAt ?? startAt;
+  if (!anchor) return null;
+  const label = formatDueLabel(anchor, timeZone, now);
+  if (!start) {
+    return { text: label.text, overdue: label.overdue, active: false, hasRange: false, today: label.dueToday };
+  }
+  const startLabel = formatDueLabel(start, timeZone, now);
+  return {
+    text: `${startLabel.text}–${sameDayInZone(start, anchor, timeZone) ? timeLabel(anchor, timeZone) : label.text}`,
+    overdue: label.overdue,
+    active: start.getTime() <= now.getTime() && now.getTime() < anchor.getTime(),
+    hasRange: true,
+    today: startLabel.dueToday || label.dueToday,
+  };
+}

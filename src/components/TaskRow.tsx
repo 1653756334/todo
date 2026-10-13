@@ -11,8 +11,8 @@ import {
 } from "lucide-react";
 import { motion, useIsPresent } from "motion/react";
 import { useUiMotion } from "@/components/Motion";
-import { formatDueLabel, formatFullDateTime } from "@/lib/time";
-import { LINK_KIND_LABELS, type TaskDTO } from "@/lib/types";
+import { formatFullDateTime, formatTaskTime } from "@/lib/time";
+import { LINK_KIND_LABELS, taskIsActive, type TaskDTO } from "@/lib/types";
 
 /** 链接胶囊里展示的文字：优先用 AI/手动给的标签，否则用去掉 www 的主机名 + 路径 */
 function linkText(url: string, label: string | null): string {
@@ -55,16 +55,25 @@ export function TaskRow({
 }: Props) {
   const present = useIsPresent();
   const { reduced, transition } = useUiMotion(0.16);
-  const due = task.dueAt
-    ? formatDueLabel(new Date(task.dueAt), timeZone, now)
-    : null;
+  const time = formatTaskTime(
+    task.startAt ? new Date(task.startAt) : null,
+    task.dueAt ? new Date(task.dueAt) : null,
+    timeZone,
+    now,
+  );
   const isDone = task.status === "done";
-  const dueTone =
-    due?.overdue && !isDone
+  const isActive = taskIsActive(task, now);
+  const timeTone =
+    time?.overdue && !isDone
       ? "text-danger"
-      : due?.dueToday && !isDone
+      : time?.today && !isDone
         ? "text-accent"
         : "text-muted";
+  const timeTitle = time?.hasRange
+    ? `${formatFullDateTime(new Date(task.startAt!), timeZone)} → ${formatFullDateTime(new Date(task.dueAt!), timeZone)} · ${timeZone}`
+    : task.dueAt
+      ? `${formatFullDateTime(new Date(task.dueAt), timeZone)} · ${timeZone}`
+      : "";
 
   return (
     <motion.div
@@ -156,7 +165,7 @@ export function TaskRow({
             ) : (
               <span>收件箱</span>
             )}
-            {task.status === "doing" ? (
+            {task.status === "doing" || isActive ? (
               <span className="text-accent">进行中</span>
             ) : null}
             {task.priority === "high" ? (
@@ -218,14 +227,14 @@ export function TaskRow({
             </span>
           ) : null}
         </div>
-        {due ? (
+        {time ? (
           <span
-            className={`inline-flex shrink-0 items-center gap-1.5 text-[12px] md:justify-end ${dueTone}`}
-            title={`${formatFullDateTime(new Date(task.dueAt!), timeZone)} · ${timeZone}`}
+            className={`inline-flex shrink-0 items-center gap-1.5 text-[12px] md:justify-end ${timeTone}`}
+            title={timeTitle}
           >
             <CalendarDays size={13} />
-            {due.text}
-            {due.overdue && !isDone ? (
+            {time.text}
+            {time.overdue && !isDone ? (
               <span className="ml-1 rounded bg-danger/8 px-1.5 py-0.5 text-[10px]">
                 逾期
               </span>

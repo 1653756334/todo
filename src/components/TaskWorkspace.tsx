@@ -28,7 +28,12 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Checkbox } from "@/components/ui/controls";
 import { apiFetch } from "@/lib/client";
 import { nextDayStartInZone } from "@/lib/time";
-import type { NotifyPolicy, ProjectOption, TaskDTO } from "@/lib/types";
+import {
+  taskScheduleTime,
+  type NotifyPolicy,
+  type ProjectOption,
+  type TaskDTO,
+} from "@/lib/types";
 
 type Props = {
   initialTasks: TaskDTO[];
@@ -54,10 +59,9 @@ function sortTasks(tasks: TaskDTO[], key: SortKey): TaskDTO[] {
       const diff =
         (PRIORITY_ORDER[a.priority] ?? 1) - (PRIORITY_ORDER[b.priority] ?? 1);
       if (diff !== 0) return diff;
-      return (
-        (a.dueAt ? new Date(a.dueAt).getTime() : Infinity) -
-        (b.dueAt ? new Date(b.dueAt).getTime() : Infinity)
-      );
+      const ta = taskScheduleTime(a);
+      const tb = taskScheduleTime(b);
+      return ta === tb ? 0 : ta - tb;
     });
     return list;
   }
@@ -68,10 +72,14 @@ function sortTasks(tasks: TaskDTO[], key: SortKey): TaskDTO[] {
     );
     return list;
   }
-  list.sort((a, b) =>
-    (a.dueAt ? Date.parse(a.dueAt) : Infinity) - (b.dueAt ? Date.parse(b.dueAt) : Infinity) ||
-    Date.parse(b.createdAt) - Date.parse(a.createdAt),
-  );
+  list.sort((a, b) => {
+    const ta = taskScheduleTime(a);
+    const tb = taskScheduleTime(b);
+    return (
+      (ta === tb ? 0 : ta - tb) ||
+      Date.parse(b.createdAt) - Date.parse(a.createdAt)
+    );
+  });
   return list;
 }
 
@@ -155,7 +163,7 @@ export function TaskWorkspace({
       if (status ? task.status !== status : task.status === "done") return false;
       if (view === "inbox" && task.projectId) return false;
       if (view === "project" && task.projectId !== projectId) return false;
-      if (view === "today" && (!task.dueAt || Date.parse(task.dueAt) >= nextDayStartInZone(new Date(), timeZone).getTime())) return false;
+      if (view === "today" && taskScheduleTime(task) >= nextDayStartInZone(new Date(), timeZone).getTime()) return false;
       if (searchParams.get("priority") && task.priority !== searchParams.get("priority")) return false;
       if (searchParams.get("tag") && !task.tags.includes(searchParams.get("tag")!)) return false;
       const query = searchParams.get("q")?.trim().toLocaleLowerCase();
@@ -437,16 +445,14 @@ export function TaskWorkspace({
     }
   }
 
-  const overdue = groupOverdue
-    ? sorted.filter(
-        (task) => task.dueAt && new Date(task.dueAt).getTime() < Date.now(),
-      )
-    : [];
-  const rest = groupOverdue
-    ? sorted.filter(
-        (task) => !task.dueAt || new Date(task.dueAt).getTime() >= Date.now(),
-      )
-    : sorted;
+  // 逾期：结束时间（区间任务用截止时间）已过且任务未完成。
+  const nowMs = Date.now();
+  const isOverdue = (task: TaskDTO) =>
+    task.status !== "done" &&
+    task.dueAt !== null &&
+    Date.parse(task.dueAt) < nowMs;
+  const overdue = groupOverdue ? sorted.filter(isOverdue) : [];
+  const rest = groupOverdue ? sorted.filter((task) => !isOverdue(task)) : sorted;
 
   function renderRow(task: TaskDTO) {
     const index = sorted.findIndex((item) => item.id === task.id);

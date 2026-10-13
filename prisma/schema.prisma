@@ -85,11 +85,17 @@ model Task {
   notes               String?
   status              String       @default("todo")
   priority            TaskPriority @default(normal)
+  /// 区间开始时间。留空就是只有一个截止时间的普通任务。
+  startAt             DateTime?    @db.Timestamptz(3)
   dueAt               DateTime?    @db.Timestamptz(3)
+  /// 列表排序与「今天」判定用的时间：有区间取开始，否则取截止。由服务层在写入时维护。
+  sortAt              DateTime?    @db.Timestamptz(3)
   projectId           String?
   project             Project?     @relation(fields: [ownerId, projectId], references: [ownerId, id], onDelete: NoAction)
   remindEnabled       Boolean      @default(true)
   remindLeadMin       Int          @default(60)
+  /// 区间开始前提前多少分钟提醒（0 表示到点提醒）。只在有区间时使用。
+  remindStartLeadMin  Int          @default(0)
   sourceId            String?
   source              Import?      @relation(fields: [ownerId, sourceId], references: [ownerId, id], onDelete: NoAction)
   revision            Int          @default(1)
@@ -106,6 +112,7 @@ model Task {
 
   @@unique([ownerId, clientMutationId])
   @@index([ownerId, status, dueAt, id])
+  @@index([ownerId, status, sortAt, id])
   @@index([ownerId, projectId])
   @@index([sourceId])
 }
@@ -219,8 +226,11 @@ model Reminder {
   task            Task                   @relation(fields: [taskId], references: [id], onDelete: Cascade)
   recipientUserId String
   recipient       User                   @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  /// 提醒锚点：start = 区间开始时，end = 截止时间时。单点任务只有 end。
+  slot            String                 @default("end")
   planVersion     Int
   triggerAt       DateTime               @db.Timestamptz(3)
+  /// 锚点时刻的快照：start 槽存区间开始，end 槽存截止时间。
   dueSnapshot     DateTime               @db.Timestamptz(3)
   status          String                 @default("pending")
   // Historical fields preserved during legacy data import.
@@ -236,7 +246,7 @@ model Reminder {
   updatedAt       DateTime               @updatedAt @db.Timestamptz(3)
   deliveries      NotificationDelivery[]
 
-  @@unique([taskId, planVersion])
+  @@unique([taskId, planVersion, slot])
   @@index([status, triggerAt])
   @@index([recipientUserId, triggerAt])
 }
